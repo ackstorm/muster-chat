@@ -6,7 +6,7 @@ delivers its own inbox to itself over a stdio MCP channel.
 
 > **Status: MVP — inbound delivery + `roster` / `chat` / `fetch`.** Same-group only (no
 > cross-group coordination). `ack` / `announce` / `task_add` and a standalone
-> presence daemon are out of scope for now — see the [spec](../../docs/spec).
+> presence daemon are out of scope for now.
 
 ## How it works
 

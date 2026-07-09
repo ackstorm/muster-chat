@@ -70,7 +70,7 @@ GROUP, NAME, PANE_ID = resolve_identity()
 INBOX = naming.ikey(GROUP, NAME)
 CURSOR = naming.rkey(GROUP, NAME)
 
-srv = Server("muster", version="0.1.0", instructions=INSTRUCTIONS)
+srv = Server("muster", version="0.1.1", instructions=INSTRUCTIONS)
 
 _R = {"client": None}  # set once Valkey connects — the ONE shared client (see connect())
 _CONNECT_LOCK = anyio.Lock()  # serialize connect() so racing tasks don't each build a client
@@ -126,6 +126,15 @@ async def _list_tools():
     ]
 
 
+def _inbox_line(i):
+    """Render one fetched inbox entry. join/leave notices (kind set, no body) show their
+    summary as-is — not a dangling 'Message from X:' — so presence noise doesn't read as empty
+    mail and bury who actually messaged you. Real mail shows sender + subject + body."""
+    if i.get("kind"):
+        return f"[{i['ts']}] {i['summary']}"
+    return f"[{i['ts']}] Message from {i['from']}: " + (f"({i['subject']}) " if i['subject'] else "") + i['body']
+
+
 @srv.call_tool()
 async def _call_tool(name, args):
     try:
@@ -152,9 +161,7 @@ async def _call_tool(name, args):
         items = await busops.fetch_inbox(r, GROUP, NAME, limit=limit)
         if not items:
             return [t.TextContent(type="text", text="Your Muster inbox is empty.")]
-        lines = [f"[{i['ts']}] Message from {i['from']}: " + (f"({i['subject']}) " if i['subject'] else "") + i['body']
-                 for i in items]
-        return [t.TextContent(type="text", text="Your Muster inbox (recent):\n" + "\n".join(lines))]
+        return [t.TextContent(type="text", text="Your Muster inbox (recent):\n" + "\n".join(_inbox_line(i) for i in items))]
     return [t.TextContent(type="text", text=f"unknown tool {name}")]
 
 

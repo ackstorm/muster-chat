@@ -24,7 +24,7 @@ Two things at once: the **project home** for **Muster**, an agent coordination b
 - `hooks/hooks.json` — a **bundled SessionStart hook** (matcher `clear|compact`). Not an MCP module and not a script: a single static `echo` that re-injects a fixed nudge via `additionalContext` ("Muster is still active — use `roster`/`fetch`, load the skill"). No Valkey, no Python — live data comes from the tools on demand. Dynamic orientation stays on the startup welcome (server already connected); spinning up a redis-connecting subprocess on every `/clear` was not worth the one dynamic line.
 - `muster_channel.py` — wires it together: resolve identity at startup, `relay_inbox` (tails own inbox → `_push_entries` pushes each), `register_presence` (git/herdr status via `anyio.to_thread`), `welcome`, `announce_join` (opt-out `MUSTER_JOIN=0`, deduped by a `SET NX` marker), the three tools, and the request-dispatch loop. `connect()` caches the one shared Valkey client behind a lock.
 
-**Tools (all same-group):** `roster` (list live peers by name + status), `chat {to, body, subject?}` (real-time 1:1 — deliver to a peer's inbox → their relay pushes a short **envelope**: sender + subject, plus a "· fetch for full" nudge when the body is longer than the line; refused if the target's herdr status is not `idle`, unless `important: true` overrides and marks it ❗, read when the agent next runs), `fetch {limit?}` (read own inbox full bodies; the channel push carries only envelopes/summaries). A future async **queue** lane (enqueue work → a dispatcher assigns/spawns) is captured in `docs/TODO-task-queue.md`; the broadcast name `announce` is reserved for it.
+**Tools (all same-group):** `roster` (list live peers by name + status), `chat {to, body, subject?}` (real-time 1:1 — deliver to a peer's inbox → their relay pushes a short **envelope**: sender + subject, plus a "· fetch for full" nudge when the body is longer than the line; refused if the target's herdr status is not `idle`, unless `important: true` overrides and marks it ❗, read when the agent next runs), `fetch {limit?}` (read own inbox full bodies; the channel push carries only envelopes/summaries). A future async **queue** lane (enqueue work → a dispatcher assigns/spawns) is planned; the broadcast name `announce` is reserved for it.
 
 ## Non-obvious invariants — read before editing
 
@@ -78,4 +78,4 @@ HERDR_PANE_ID=w9:p9 HERDR_WORKSPACE_ID=w9 MUSTER_WELCOME=0 \
 
 ## Scope
 
-Shipped: inbound delivery + `roster`/`chat`/`fetch`, same-group only; co-located panes disambiguated by a `-pid:{pid}` name suffix. Out of scope (see `docs/spec/`): a standalone presence daemon, cross-group messaging, `ack`/`announce`/`task_add`.
+Shipped: inbound delivery + `roster`/`chat`/`fetch`, same-group only; co-located panes disambiguated by a `-pid:{pid}` name suffix. Out of scope: a standalone presence daemon, cross-group messaging, `ack`/`announce`/`task_add`.

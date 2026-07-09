@@ -16,6 +16,17 @@ def test_tool_surface_is_roster_chat_fetch():
     assert "important" in chat.inputSchema["properties"]
 
 
+def test_inbox_line_renders_notice_vs_message():
+    # join/leave notices show their summary, NOT a dangling empty "Message from X:" that
+    # buried real mail among presence noise (the confusion this fixes).
+    join = {"ts": "1", "from": "c", "subject": "", "body": "",
+            "summary": 'FYI: 👋 "c" joined group "g"', "kind": "join"}
+    msg = {"ts": "2", "from": "a", "subject": "regen", "body": "do it", "summary": "", "kind": ""}
+    assert muster_channel._inbox_line(join) == '[1] FYI: 👋 "c" joined group "g"'
+    assert "Message from c:" not in muster_channel._inbox_line(join)
+    assert muster_channel._inbox_line(msg) == "[2] Message from a: (regen) do it"
+
+
 # --- _push_entries: guards the relay-loop message-drop fix (no Valkey; fakes only) ---
 
 class _FailingStream:

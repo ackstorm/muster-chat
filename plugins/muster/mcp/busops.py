@@ -109,7 +109,8 @@ async def announce_leave(r, group, to, frm):
 async def fetch_inbox(r, group, name, limit=10):
     entries = await r.xrevrange(naming.ikey(group, name), count=limit)
     out = [{"msg_id": mid, "from": f.get("from", ""), "subject": f.get("subject", ""),
-            "body": f.get("body", ""), "summary": f.get("summary", ""), "ts": f.get("ts", "")}
+            "body": f.get("body", ""), "summary": f.get("summary", ""), "ts": f.get("ts", ""),
+            "kind": f.get("kind", "")}  # join/leave notices carry a kind; real mail does not
            for mid, f in entries]
     out.reverse()  # newest-last for readability
     return out

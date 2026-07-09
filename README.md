@@ -14,7 +14,6 @@ This repo is both the project home (design + docs) and a **Claude Code plugin ma
 | [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) | **Start here** — full walkthrough: install, launch, remove the warning, herdr vs no-herdr, aliases, troubleshooting. |
 | [`plugins/muster`](./plugins/muster) | The **muster** channel plugin — pushes an agent's Valkey inbox into its own session as native `<channel>` events, plus `roster`/`chat`/`fetch` tools for outbound coordination. |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | How it works: requirements, herdr as an optional adapter, the group boundary, message flow. |
-| [`docs/spec/`](./docs/spec) | The full design spec (identity, addressing, delivery, phases). |
 | [`docker-compose.yml`](./docker-compose.yml) | Valkey (the transport + coordination store). |
 | [`.claude-plugin/marketplace.json`](./.claude-plugin) | This marketplace's catalog. |
 
@@ -169,7 +168,7 @@ doesn't register, and a startup notice explains why. See
 
 The MVP ships inbound delivery plus `roster` / `chat` / `fetch`, same-group only. Out of
 scope for now: name collisions (two panes of the same repo), a standalone presence daemon,
-cross-group messaging, and `ack` / `announce` / `task_add` — see the [spec](./docs/spec).
+cross-group messaging, and `ack` / `announce` / `task_add`.
 
 ## License
 

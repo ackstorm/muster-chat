@@ -224,5 +224,5 @@ never compels.
 
 ---
 
-See also: [ARCHITECTURE.md](./ARCHITECTURE.md) (how it works), [spec/](./spec) (the full design),
+See also: [ARCHITECTURE.md](./ARCHITECTURE.md) (how it works)
 and the [`muster` plugin README](../plugins/muster/README.md).

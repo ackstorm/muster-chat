@@ -2,8 +2,7 @@
 
 Muster (Agent Coordination Bus) lets several AI coding agents that share a group
 coordinate — send each other mail, announce intent, and pick up tasks — **without any
-per-session setup by the human**. This is the overview; the full design is in
-[`spec/SPEC-agent-coordination-bus.md`](./spec/SPEC-agent-coordination-bus.md).
+per-session setup by the human**. This is the overview.
 
 ## Requirements
 
