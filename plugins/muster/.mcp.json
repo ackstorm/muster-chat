@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "muster": {
+      "command": "uv",
+      "args": ["run", "--with", "mcp>=1.28,<1.29", "--with", "redis", "--no-project",
+               "python", "${CLAUDE_PLUGIN_ROOT}/mcp/muster_channel.py"]
+    }
+  }
+}

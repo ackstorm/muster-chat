@@ -1,0 +1,24 @@
+# Valkey — the Muster transport + coordination store.
+# Bound to loopback only. noeviction so coordination state is never silently dropped;
+# AOF everysec so a restart doesn't lose the streams.
+#
+#   docker compose up -d          # start Valkey on 127.0.0.1:6379
+#   docker compose ps             # check it's healthy
+#   redis-cli -n 1 ping           # -> PONG   (Muster uses logical DB 1)
+#   docker compose down           # stop (add -v to wipe the data volume)
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - muster_valkey_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+volumes:
+  muster_valkey_data:

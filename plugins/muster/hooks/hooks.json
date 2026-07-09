@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"IMPORTANT: Muster (the agent coordination bus) is still active after this /clear or compact, but your memory of who is online was wiped. On your NEXT turn you MUST call the roster tool to get the current list of live peers, and call fetch to pick up any messages that arrived while you were away, before other work. For the full doctrine, load the skill: Skill muster:muster-chat.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
