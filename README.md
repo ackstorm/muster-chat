@@ -13,6 +13,7 @@ This repo is both the project home (design + docs) and a **Claude Code plugin ma
 |---|---|
 | [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) | **Start here** — full walkthrough: install, launch, remove the warning, herdr vs no-herdr, aliases, troubleshooting. |
 | [`plugins/muster`](./plugins/muster) | The **muster** channel plugin — pushes an agent's Valkey inbox into its own session as native `<channel>` events, plus `roster`/`chat`/`fetch` tools for outbound coordination. |
+| [`plugins/muster/opencode`](./plugins/muster/opencode) | The **OpenCode** port — a native OpenCode plugin that joins the same group over the same Valkey/schema, so OpenCode and Claude agents interoperate. See [OpenCode](#opencode) below. |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | How it works: requirements, herdr as an optional adapter, the group boundary, message flow. |
 | [`docker-compose.yml`](./docker-compose.yml) | Valkey (the transport + coordination store). |
 | [`.claude-plugin/marketplace.json`](./.claude-plugin) | This marketplace's catalog. |
@@ -36,6 +37,9 @@ See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for how the pieces fit togeth
 > The short version is below. For the complete walkthrough — removing the warning, herdr vs
 > no-herdr groups, environment variables, aliases, and troubleshooting — see
 > **[docs/GETTING-STARTED.md](./docs/GETTING-STARTED.md)**.
+>
+> This Quickstart is for **Claude Code**. Running **OpenCode**? See [OpenCode](#opencode) — it
+> joins the same group over the same Valkey, so the two coordinate.
 
 **1. Start Valkey**
 
@@ -103,6 +107,45 @@ redis-cli -n 1 XADD "muster:inbox:<group>:<name>" '*' summary "2 unread from ach
 
 It appears in the target session as `← muster: 2 unread from ach — run fetch`.
 </details>
+
+## OpenCode
+
+OpenCode agents can join the **same** coordination group as Claude agents — same Valkey, same
+key schema — and see and message each other. muster ships a native OpenCode plugin at
+[`plugins/muster/opencode/muster-chat.js`](./plugins/muster/opencode/muster-chat.js).
+
+**Requirements** — OpenCode **≥ 1.17** (older builds don't load the plugin cleanly; if you run
+several installs, launch the right binary explicitly, e.g. `~/.opencode/bin/opencode`), which
+runs on **Bun** (the plugin uses Bun's native Redis client — no npm dependencies). Plus Valkey,
+as in [Requirements](#requirements) above.
+
+**1. Install** — copy the one file into OpenCode's plugins dir (auto-loaded on launch):
+
+```bash
+cp plugins/muster/opencode/muster-chat.js ~/.config/opencode/plugins/
+# or straight from the repo:
+curl -fsSL https://raw.githubusercontent.com/ackstorm/muster-chat/main/plugins/muster/opencode/muster-chat.js \
+  -o ~/.config/opencode/plugins/muster-chat.js
+```
+
+**2. Launch OpenCode normally** — no channel flag. On startup it registers in your group and
+announces itself to the peers already live (a `👋 … joined` notice in their session).
+
+**3. Coordinate** — same three tools as Claude, namespaced for OpenCode:
+
+- `muster_roster` — list live peers in your group.
+- `muster_chat {to, body, subject?, important?}` — real-time 1:1 message to a peer by name.
+- `muster_fetch {limit?}` — read your own inbox in full.
+
+**Delivery differs from Claude.** OpenCode has no channel push (its MCP client is tools-only),
+so an incoming message is delivered by **server-push wake**: a background relay injects it into
+the live session via OpenCode's server API (`session.prompt`), waking an idle agent so it reads
+the message live — the OpenCode analog of Claude's `<channel>` push. One caveat: a brand-new
+session sitting on the "Ask anything" splash has no session id yet, so the first message waits
+until you send one prompt; after that, wake-from-idle works for the rest of the session.
+
+**Env vars** — the same `MUSTER_GROUP` and `MUSTER_VALKEY_URL` as the Claude side; point both at
+the **same Valkey** to interoperate. `MUSTER_DEBUG=<path>` writes a relay trace for debugging.
 
 ## Updating
 
