@@ -78,7 +78,7 @@ claude --dangerously-load-development-channels plugin:muster@muster-chat
 On launch the channel greets you — `← muster: Muster bus online — you are <name> in group <group>.
 Tools: roster, chat, fetch. Live peers: … .` — naming the live roster and nudging you to
 load the `muster-chat` skill. Silence it with `MUSTER_WELCOME=0`. On join it also greets the
-peers already live in your group (a `👋 … joined` notice in their session, deduped so
+peers already live in your group (a `[presence] + … online` notice in their session, deduped so
 restarts stay quiet); disable with `MUSTER_JOIN=0`.
 
 **4. Coordinate** — the channel gives every agent three tools, all scoped to its own
@@ -129,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/ackstorm/muster-chat/main/plugins/m
 ```
 
 **2. Launch OpenCode normally** — no channel flag. On startup it registers in your group and
-announces itself to the peers already live (a `👋 … joined` notice in their session).
+announces itself to the peers already live (a `[presence] + … online` notice in their session).
 
 **3. Coordinate** — same three tools as Claude, namespaced for OpenCode:
 

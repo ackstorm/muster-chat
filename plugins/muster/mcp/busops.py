@@ -89,21 +89,26 @@ async def send_message(r, group, to, frm, body, subject=None, important=False):
 
 
 async def announce_join(r, group, to, frm):
-    """Drop a one-line 'X joined' notice into a live peer's inbox so it surfaces in their
-    channel. Summary-only (no body) — it's a heads-up, not mail to fetch. ponytail: fires
-    once per process start, so a peer that restarts often re-greets; add a dedup marker
-    only if that noise ever bites."""
+    """Drop a one-line presence notice into a live peer's inbox so it surfaces in their
+    channel. Summary-only (no body) — it's a heads-up, not mail to fetch.
+
+    Wording is load-bearing: an idle agent that reads "👋 X joined" treats it as an event to
+    look into (roster, herdr, who-is-this). The `[presence]` tag + "(no action needed)" say
+    it is a roster fact, not a request. Keep it flat — no emoji, no greeting, no name-calling.
+
+    ponytail: fires once per process start, so a peer that restarts often re-greets; add a
+    dedup marker only if that noise ever bites."""
     return await r.xadd(naming.ikey(group, to), {
         "from": frm, "kind": "join", "ts": str(int(time.time())),
-        "summary": f'FYI: 👋 "{frm}" joined group "{group}"'})
+        "summary": f'[presence] + "{frm}" online (no action needed)'})
 
 
 async def announce_leave(r, group, to, frm):
-    """Drop a one-line 'X is leaving' notice into a live peer's inbox on graceful shutdown
-    (SIGTERM). Summary-only, same as announce_join — a heads-up, not mail to fetch."""
+    """Drop a one-line presence notice into a live peer's inbox on graceful shutdown
+    (SIGTERM). Summary-only, same wording contract as announce_join."""
     return await r.xadd(naming.ikey(group, to), {
         "from": frm, "kind": "leave", "ts": str(int(time.time())),
-        "summary": f'FYI: 💀 "{frm}" left group "{group}"'})
+        "summary": f'[presence] − "{frm}" offline (no action needed)'})
 
 
 async def fetch_inbox(r, group, name, limit=10):

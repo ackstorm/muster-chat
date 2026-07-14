@@ -50,7 +50,7 @@ delivers its own inbox to itself over a stdio MCP channel.
   `/clear`, so you stay registered and reachable; live peers and pending mail come from the tools
   on demand. A plain `echo` (no Valkey, no script), ships in the plugin, no user config.
 - On startup it also **greets** the peers already live in the group — each gets a
-  `👋 {name} joined group {group}` notice in their channel, so running agents learn a new
+  `[presence] + {name} online (no action needed)` notice in their channel, so running agents learn a new
   peer arrived. Deduped by a 5-minute marker (`SET NX`), so a quick restart does **not**
   re-announce. Disable with `MUSTER_JOIN=0`.
 

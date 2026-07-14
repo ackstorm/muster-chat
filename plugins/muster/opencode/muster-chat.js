@@ -182,7 +182,7 @@ export const MusterChatPlugin = async ({ client, directory, worktree, $ }) => {
       if (!fresh) continue; // already greeted this peer recently
       await r.send("XADD", [ikey(group, peer.name), "*",
         "from", name, "kind", "join", "ts", String(Math.floor(Date.now() / 1000)),
-        "summary", `FYI: 👋 "${name}" joined group "${group}"`]);
+        "summary", `[presence] + "${name}" online (no action needed)`]);
     }
   }
 

@@ -99,8 +99,9 @@ def test_announce_join_lands_in_peer_inbox(r):
         await busops.write_presence(r, "busT", "ach", {"pane_id": "w1:p1"})
         await busops.announce_join(r, "busT", "ach", "ach-agent")
         got = await busops.fetch_inbox(r, "busT", "ach")
-        assert got[-1]["from"] == "ach-agent" and "joined" in got[-1]["summary"]
-        assert "ach-agent" in got[-1]["summary"] and "busT" in got[-1]["summary"]
+        assert got[-1]["from"] == "ach-agent" and got[-1]["kind"] == "join"
+        # wording contract: tagged [presence], names the peer, says no action is needed
+        assert got[-1]["summary"] == '[presence] + "ach-agent" online (no action needed)' 
     run(go())
 
 def test_announce_leave_lands_in_peer_inbox(r):
@@ -109,8 +110,8 @@ def test_announce_leave_lands_in_peer_inbox(r):
         await busops.write_presence(r, "busT", "ach", {"pane_id": "w1:p1"})
         await busops.announce_leave(r, "busT", "ach", "ach-agent")
         got = await busops.fetch_inbox(r, "busT", "ach")
-        assert got[-1]["from"] == "ach-agent" and "left" in got[-1]["summary"]
-        assert "ach-agent" in got[-1]["summary"] and "busT" in got[-1]["summary"]
+        assert got[-1]["from"] == "ach-agent" and got[-1]["kind"] == "leave"
+        assert got[-1]["summary"] == '[presence] − "ach-agent" offline (no action needed)' 
     run(go())
 
 def test_send_to_unknown_agent_errors_with_roster(r):

@@ -152,7 +152,7 @@ falls back to the directory name, then a generated id.
 | `MUSTER_GROUP` | herdr workspace, else `local` | Coordination scope (§4). |
 | `MUSTER_VALKEY_URL` | `redis://localhost:6379/1` | Where Valkey lives. |
 | `MUSTER_WELCOME` | `1` | `0` silences the startup greeting to yourself. |
-| `MUSTER_JOIN` | `1` | `0` silences the `👋 joined` notice you send to peers on startup (deduped 5 min, so restarts stay quiet). |
+| `MUSTER_JOIN` | `1` | `0` silences the `[presence] + … online` notice you send to peers on startup (deduped 5 min, so restarts stay quiet). |
 
 herdr's `HERDR_ENV` / `HERDR_PANE_ID` / `HERDR_WORKSPACE_ID` are read when present.
 
@@ -200,7 +200,7 @@ The recipient sees, in their session:
 <channel source="muster" ident="w5:ach-agent" msg_id="…">✉ Message from ach: schema regen · fetch for full</channel>
 ```
 
-On startup you also greet peers already live in the group (`FYI: 👋 "you" joined group "…"`) unless
+On startup you also notify peers already live in the group (`[presence] + "you" online (no action needed)`) unless
 `MUSTER_JOIN=0`.
 
 ## 8. Trust model
