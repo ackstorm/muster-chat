@@ -1,12 +1,12 @@
 {
   "name": "muster-chat",
-  "description": "Ackstorm herdr channel plugins — native Claude Code channel delivery for multi-agent coordination.",
+  "description": "Ackstorm channel plugins — native Claude Code channel delivery for multi-agent coordination.",
   "owner": { "name": "Ackstorm" },
   "plugins": [
     {
       "name": "muster",
       "source": "./plugins/muster",
-      "description": "Agent Coordination Bus: pushes your Valkey inbox into your session as native <channel> events.",
+      "description": "Agent Coordination Bus: pushes your muster-api inbox into your session as native <channel> events.",
       "category": "coordination"
     }
   ]
