@@ -91,3 +91,20 @@ async def test_bad_key_401(client):
     resp = await client.post("/v1/rpc", json={"op": "fetch", "args": {}},
                              headers=hdrs("nope", JC))
     assert resp.status_code == 401
+
+
+async def test_readyz_reflects_valkey(client):
+    ok = await client.get("/readyz")
+    assert ok.status_code == 200 and ok.json()["ok"] is True
+    # unreachable valkey -> 503 (readiness gate), while /healthz stays 200 (liveness)
+    import redis.asyncio as redis
+    from muster_api import app as app_mod, config
+    cfg = config.load(env={"MUSTER_VALKEY_URL": "redis://localhost:1/0",
+                           "MUSTER_STATIC_KEYS": "{}"})
+    bad = app_mod.create_app(cfg)
+    bad.state.redis = redis.from_url("redis://localhost:1/0",
+                                     socket_connect_timeout=0.2, decode_responses=True)
+    transport = __import__("httpx").ASGITransport(app=bad)
+    async with __import__("httpx").AsyncClient(transport=transport, base_url="http://t") as c:
+        assert (await c.get("/readyz")).status_code == 503
+        assert (await c.get("/healthz")).status_code == 200

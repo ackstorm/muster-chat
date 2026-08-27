@@ -1,26 +1,68 @@
 image:
   repository: ghcr.io/ackstorm/muster-chat
   tag: ""   # defaults to .Chart.AppVersion
-replicas: 2
+imagePullSecrets: []
+
+replicas: 2   # SSE is replica-safe: delivery fans out through Valkey pub/sub, never pod memory
+
+# Requests set deliberately so pods never land in BestEffort QoS; no cpu limit
+# (CFS throttling hurts a synchronous HTTP service more than it protects).
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 256Mi}
+
+probes:
+  # readiness hits /readyz (pings Valkey — an unreachable store stops routing);
+  # liveness hits /healthz (static — a dependency outage must not restart-loop pods).
+  readiness: {initialDelaySeconds: 2, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3}
+  liveness: {initialDelaySeconds: 5, periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 3}
 
 valkey:
   # inline: the chart deploys a single-node Valkey (StatefulSet + PVC) with AOF
   #         enabled — works out of the box, fine for small deployments.
-  # external: bring your own Valkey and set valkey.url. It MUST run
-  #         --appendonly yes --appendfsync everysec (spec §16) — without AOF,
-  #         a restart deletes every inbox and durable unicast is void.
+  # external: bring your own Valkey. Set EITHER valkey.url (plaintext) OR
+  #         valkey.urlSecret (the full redis:// URL, password included, read from a
+  #         Kubernetes Secret — e.g. redis://:pass@muster-valkey-master:6379/0).
+  #         It MUST run --appendonly yes --appendfsync everysec (spec §16) — without
+  #         AOF, a restart deletes every inbox and durable unicast is void.
   mode: inline
-  url: ""   # required when mode=external, e.g. redis://muster-valkey:6379/1
+  url: ""
+  urlSecret:
+    name: ""   # Secret name holding the full MUSTER_VALKEY_URL
+    key: ""    # key inside that Secret
   inline:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:8-alpine@sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84
     storage: 1Gi
     storageClassName: ""   # empty = cluster default
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {memory: 256Mi}
 
 auth:
   resolverUrl: http://litellm.litellm.svc:4000/v2/user/info
   resolverHeader: x-litellm-api-key
   userField: user_id
   groupsField: teams
+
+# Extra environment for the api container — any MUSTER_* knob the server reads
+# (MUSTER_MESSAGE_TTL, MUSTER_INBOX_MAXLEN, MUSTER_CHAT_RATE, MUSTER_ANNOUNCE_RATE,
+# MUSTER_RATE_WINDOW, MUSTER_BODY_MAX, MUSTER_AUTH_CACHE_TTL, MUSTER_AGENT_RETENTION,
+# MUSTER_STATIC_KEYS…). Standard k8s EnvVar entries (value or valueFrom).
+extraEnv: []
+envFrom: []
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: false
+  name: ""
+
+pdb:
+  enabled: false
+  minAvailable: 1
 
 ingress:
   enabled: false
@@ -33,3 +75,12 @@ ingress:
     secretName: ""
   # extra annotations merged into the Ingress (the SSE ones are always set)
   annotations: {}
+
+# Gateway API alternative to the (nginx-specific) Ingress above. Renders an
+# HTTPRoute; with stripPrefix the path prefix is rewritten to / before the pod.
+httpRoute:
+  enabled: false
+  parentRefs: []   # e.g. [{name: my-gateway, namespace: istio-system}]
+  hostnames: []    # e.g. [api.example.com]
+  path: /          # PathPrefix to match
+  stripPrefix: false

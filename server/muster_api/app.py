@@ -51,6 +51,16 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz():
+        # Static on purpose: liveness. A Valkey outage must not restart-loop the
+        # pods — readiness (/readyz) stops routing to them instead.
+        return {"ok": True}
+
+    @app.get("/readyz")
+    async def readyz():
+        try:
+            await app.state.redis.ping()
+        except Exception:
+            return JSONResponse({"ok": False, "valkey": "unreachable"}, status_code=503)
         return {"ok": True}
 
     @app.post("/v1/rpc")

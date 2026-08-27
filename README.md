@@ -73,10 +73,15 @@ with AOF enabled (`valkey.mode: inline`). The knobs:
 
 | Value | Default | Meaning |
 |---|---|---|
-| `valkey.mode` | `inline` | `inline` = chart-managed Valkey (StatefulSet+PVC, AOF pinned). `external` = bring your own: set `valkey.url` (it must run AOF `everysec`). |
+| `valkey.mode` | `inline` | `inline` = chart-managed Valkey (StatefulSet+PVC, AOF pinned, digest-pinned image). `external` = bring your own (must run AOF `everysec`): set `valkey.url`, or `valkey.urlSecret.{name,key}` to read the full `redis://:pass@host:6379/0` URL from a Kubernetes Secret. |
 | `auth.resolverUrl` | LiteLLM example | Identity resolver the API keys are validated against. |
-| `ingress.enabled` | `false` | Enable to expose the bus. Root-path routing, SSE-safe annotations (no buffering, long read timeout) always included. |
+| `resources`, `valkey.inline.resources` | sane defaults | Requests/limits for the api and the inline Valkey. |
+| `probes.readiness` / `probes.liveness` | tuned defaults | Readiness hits `/readyz` (pings Valkey); liveness hits `/healthz` (static — a store outage stops routing, never restart-loops). |
+| `extraEnv`, `envFrom` | `[]` | Any server knob (`MUSTER_MESSAGE_TTL`, `MUSTER_CHAT_RATE`, `MUSTER_STATIC_KEYS`…) as standard EnvVar entries. |
+| `podAnnotations`, `nodeSelector`, `tolerations`, `affinity`, `imagePullSecrets`, `serviceAccount`, `pdb` | off/empty | The usual scheduling and disruption escape hatches. |
+| `ingress.enabled` | `false` | nginx Ingress. Root-path routing, SSE-safe annotations (no buffering, long read timeout) always included. |
 | `ingress.tls.secretName` | `""` | Optional. Leave empty when TLS terminates upstream (LB, wildcard cert); setting it renders the `tls` block and forces ssl-redirect. |
+| `httpRoute.enabled` | `false` | Gateway API alternative: HTTPRoute with `parentRefs`/`hostnames`/`path`, and `stripPrefix: true` to rewrite the prefix to `/` (sub-path mounting is safe — the API emits no absolute or root-relative URLs). |
 
 ```bash
 # example: external Valkey + ingress with existing upstream TLS

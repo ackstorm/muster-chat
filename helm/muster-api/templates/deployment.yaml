@@ -2,14 +2,29 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
+  labels:
+    {{- include "muster-api.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
-    matchLabels: {app: {{ .Release.Name }}}
+    matchLabels:
+      {{- include "muster-api.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {app: {{ .Release.Name }}}
+      labels:
+        {{- include "muster-api.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "muster-api.serviceAccountName" . }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001        # must match the Dockerfile's useradd uid
@@ -21,15 +36,46 @@ spec:
           env:
             {{- if eq .Values.valkey.mode "inline" }}
             - {name: MUSTER_VALKEY_URL, value: {{ printf "redis://%s-valkey:6379/0" .Release.Name | quote }}}
+            {{- else if .Values.valkey.urlSecret.name }}
+            - name: MUSTER_VALKEY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.valkey.urlSecret.name }}
+                  key: {{ required "valkey.urlSecret.key is required with valkey.urlSecret.name" .Values.valkey.urlSecret.key }}
             {{- else }}
-            - {name: MUSTER_VALKEY_URL, value: {{ required "valkey.url is required when valkey.mode=external" .Values.valkey.url | quote }}}
+            - {name: MUSTER_VALKEY_URL, value: {{ required "set valkey.url or valkey.urlSecret when valkey.mode=external" .Values.valkey.url | quote }}}
             {{- end }}
             - {name: MUSTER_RESOLVER_URL, value: {{ .Values.auth.resolverUrl | quote }}}
             - {name: MUSTER_RESOLVER_HEADER, value: {{ .Values.auth.resolverHeader | quote }}}
             - {name: MUSTER_USER_FIELD, value: {{ .Values.auth.userField | quote }}}
             - {name: MUSTER_GROUPS_FIELD, value: {{ .Values.auth.groupsField | quote }}}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:
+            httpGet: {path: /readyz, port: 8765}
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          livenessProbe:
             httpGet: {path: /healthz, port: 8765}
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
