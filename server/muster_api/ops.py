@@ -93,7 +93,35 @@ async def op_search(r, cfg, ident: Identity, sender: Address, args: dict) -> dic
     return {"ok": True, "agents": [_public(a) for a in agents]}
 
 
-_OPS = {"chat": op_chat, "fetch": op_fetch, "roster": op_roster, "search": op_search}
+async def op_announce(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
+    """Ephemeral scoped broadcast (spec §12.2): online recipients only, full body over
+    SSE, no inbox write, no retention. Offline agents never receive it — by design."""
+    scope, project = args.get("scope") or "", args.get("project") or ""
+    body, subject = args.get("body") or "", args.get("subject")
+    if len(body.encode()) > cfg.body_max:
+        raise OpError(413, {"code": "message_too_large",
+                            "message": f"body is {len(body.encode())} bytes; cap is {cfg.body_max}"})
+    if scope == f"user:{ident.user_id}":
+        def in_scope(a): return a["user"] == ident.user_id
+    elif scope.startswith("group:") and scope[len("group:"):] in ident.groups:
+        g = scope[len("group:"):]
+        def in_scope(a): return g in a["groups"]
+    else:
+        raise OpError(403, {"code": "invalid_scope",
+                            "message": "scope must be user:<self> or group:<one of your groups>"})
+    await _check_rate(r, "announce", str(sender), cfg.announce_rate, cfg.rate_window)
+    eligible = [a for a in await _visible_agents(r, ident)
+                if in_scope(a) and a["project"] == project
+                and a["status"] == "online" and a["addr"] != str(sender)]
+    event = {"event": "deliver", "kind": "announce", "from": str(sender),
+             "subject": subject or "", "body": body}
+    for a in eligible:
+        await store.publish_deliver(r, a["addr"], event)
+    return {"ok": True, "recipients": len(eligible)}
+
+
+_OPS = {"chat": op_chat, "fetch": op_fetch, "roster": op_roster,
+        "search": op_search, "announce": op_announce}
 
 
 async def dispatch(r, cfg, ident: Identity, sender: Address, op: str, args: dict) -> dict:
