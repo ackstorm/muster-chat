@@ -2,6 +2,8 @@
 
 Central Muster coordination bus. Spec: `../docs/superpowers/specs/2026-08-27-muster-v1-central-bus-spec-v2.md`.
 
+The target Valkey MUST run `--appendonly yes --appendfsync everysec` (spec §16) — without AOF, durable unicast is void.
+
 ## Run locally
 
     docker compose up -d          # from the repo root: Valkey + muster-api on 127.0.0.1:8765

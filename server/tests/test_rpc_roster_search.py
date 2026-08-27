@@ -58,3 +58,10 @@ async def test_search_filters(client):
 async def test_search_by_group(client):
     agents = (await rpc(client, "k-jc", JC, "search", {"group": "ackstorm"}))["agents"]
     assert {a["addr"] for a in agents} == {str(JC), str(ANA)}
+
+
+async def test_search_by_foreign_group_refused(client):
+    resp = await client.post("/v1/rpc", json={"op": "search", "args": {"group": "otherteam"}},
+                             headers=hdrs("k-jc", JC))
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "invalid_scope"

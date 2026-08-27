@@ -118,9 +118,14 @@ async def unread_count(r, a: str) -> tuple[int, str]:
 
 async def rate_check(r, kind: str, a: str, limit: int, window: int) -> tuple[bool, int]:
     k = rate_key(kind, a)
-    n = await r.incr(k)
-    if n == 1:
-        await r.expire(k, window)
+    async with r.pipeline(transaction=True) as p:
+        p.incr(k)
+        p.expire(k, window, nx=True)  # only sets TTL if the key is new — one round trip, no gap
+        n, _ = await p.execute()
     if n > limit:
-        return False, max(await r.ttl(k), 1)
+        ttl = await r.ttl(k)
+        if ttl < 0:  # crash/race left the key without a TTL — re-arm it
+            await r.expire(k, window)
+            ttl = window
+        return False, max(ttl, 1)
     return True, 0

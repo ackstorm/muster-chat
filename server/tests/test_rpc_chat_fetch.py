@@ -64,6 +64,7 @@ async def test_ambiguous_reference_returns_candidates(client):
     assert out["code"] == "ambiguous_reference"
     # jc sees his own agent + ana (shared group), NOT bob — and both match "muster-chat"
     assert {c["addr"] for c in out["candidates"]} == {str(JC), str(ANA)}
+    assert all("groups" not in c for c in out["candidates"])  # no team-list leak to the resolver
 
 
 async def test_self_send_refused(client):

@@ -25,7 +25,7 @@ def _resolve_reference(ref: str, agents: list[dict]) -> dict:
     if len(hits) > 1:
         raise OpError(409, {"code": "ambiguous_reference",
                             "message": f"{ref!r} matches {len(hits)} agents; use a longer reference",
-                            "candidates": hits})
+                            "candidates": [_public(a) for a in hits]})
     return hits[0]
 
 
@@ -41,9 +41,11 @@ async def _check_rate(r, kind: str, sender: str, limit: int, window: int):
 async def op_chat(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
     body = args.get("body") or ""
     subject, important = args.get("subject"), bool(args.get("important"))
-    if len(body.encode()) > cfg.body_max:
+    if len(body.encode()) + len((subject or "").encode()) > cfg.body_max:
         raise OpError(413, {"code": "message_too_large",
-                            "message": f"body is {len(body.encode())} bytes; cap is {cfg.body_max}"})
+                            "message": f"body+subject is "
+                                       f"{len(body.encode()) + len((subject or '').encode())} "
+                                       f"bytes; cap is {cfg.body_max}"})
     target = _resolve_reference(args.get("to") or "", await _visible_agents(r, ident))
     if target["addr"] == str(sender):
         raise OpError(400, {"code": "self_send", "message": "target resolves to the sending agent"})
@@ -87,6 +89,9 @@ async def op_search(r, cfg, ident: Identity, sender: Address, args: dict) -> dic
     if args.get("runtime"):
         agents = [a for a in agents if a["runtime"] == args["runtime"]]
     if args.get("group"):
+        if args["group"] not in ident.groups:
+            raise OpError(403, {"code": "invalid_scope",
+                                "message": "group must be one of your own groups"})
         agents = [a for a in agents if args["group"] in a["groups"]]
     if args.get("live"):
         agents = [a for a in agents if a["status"] == "online"]
@@ -98,9 +103,13 @@ async def op_announce(r, cfg, ident: Identity, sender: Address, args: dict) -> d
     SSE, no inbox write, no retention. Offline agents never receive it — by design."""
     scope, project = args.get("scope") or "", args.get("project") or ""
     body, subject = args.get("body") or "", args.get("subject")
-    if len(body.encode()) > cfg.body_max:
+    if not project:
+        raise OpError(400, {"code": "invalid_scope", "message": "project is required"})
+    if len(body.encode()) + len((subject or "").encode()) > cfg.body_max:
         raise OpError(413, {"code": "message_too_large",
-                            "message": f"body is {len(body.encode())} bytes; cap is {cfg.body_max}"})
+                            "message": f"body+subject is "
+                                       f"{len(body.encode()) + len((subject or '').encode())} "
+                                       f"bytes; cap is {cfg.body_max}"})
     if scope == f"user:{ident.user_id}":
         def in_scope(a): return a["user"] == ident.user_id
     elif scope.startswith("group:") and scope[len("group:"):] in ident.groups:

@@ -28,6 +28,7 @@ async def stream_endpoint(request: Request, ident, addr) -> StreamingResponse:
     key = request.headers.get("x-muster-api-key", "")
 
     async def gen():
+        nonlocal ident  # rebound on ping re-auth below when groups change
         await store.register_agent(r, addr, ident.groups, meta, cfg.agent_retention)
         await store.touch_presence(r, a, connection_id, cfg.presence_ttl)
         pubsub = r.pubsub()
@@ -46,18 +47,24 @@ async def stream_endpoint(request: Request, ident, addr) -> StreamingResponse:
                     yield f"event: deliver\ndata: {msg['data']}\n\n"  # forward verbatim
                 if time.monotonic() - last_tick >= cfg.ping_interval:
                     try:
-                        await request.app.state.auth.resolve(key)  # §5.4: cache-bounded re-auth
+                        ident2 = await request.app.state.auth.resolve(key)  # §5.4: cache-bounded re-auth
                     except AuthError as e:
                         yield _sse("error", {"code": e.code, "message": "stream closed: " + e.message})
                         return
+                    if tuple(ident2.groups) != tuple(ident.groups):
+                        # groups changed since connect (or last ping) — refresh the registry
+                        # entry so ACL/roster/search reflect it for the rest of the stream life.
+                        await store.register_agent(r, addr, ident2.groups, meta, cfg.agent_retention)
+                        ident = ident2
                     await store.touch_presence(r, a, connection_id, cfg.presence_ttl)
                     yield ": ping\n\n"
                     last_tick = time.monotonic()
         finally:
             # known trap: cleanup awaits inherit the same (already-cancelled) anyio cancel
             # scope on client disconnect and would themselves be cancelled before completing
-            # — shield so presence cleanup always lands.
-            with anyio.CancelScope(shield=True):
+            # — shield so presence cleanup always lands. Deadline bounds a blackholed Valkey
+            # so shutdown can't stall forever.
+            with anyio.move_on_after(5, shield=True):
                 await pubsub.aclose()
                 await store.clear_presence(r, a, connection_id)  # no-op if a successor took over
 
