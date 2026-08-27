@@ -69,7 +69,31 @@ async def op_fetch(r, cfg, ident: Identity, sender: Address, args: dict) -> dict
          "important": m.get("important") == "1"} for m in msgs]}
 
 
-_OPS = {"chat": op_chat, "fetch": op_fetch}  # roster/search (Task 7), announce (Task 8) extend this
+def _public(a: dict) -> dict:
+    """Roster row: groups stripped — membership is resolver business, not roster content."""
+    return {k: a[k] for k in ("addr", "user", "host", "runtime", "project", "session", "status", "meta")}
+
+
+async def op_roster(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
+    return {"ok": True, "agents": [_public(a) for a in await _visible_agents(r, ident)]}
+
+
+async def op_search(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
+    agents = await _visible_agents(r, ident)
+    if args.get("user"):
+        agents = [a for a in agents if a["user"] == args["user"]]
+    if args.get("project"):
+        agents = [a for a in agents if a["project"] == args["project"]]
+    if args.get("runtime"):
+        agents = [a for a in agents if a["runtime"] == args["runtime"]]
+    if args.get("group"):
+        agents = [a for a in agents if args["group"] in a["groups"]]
+    if args.get("live"):
+        agents = [a for a in agents if a["status"] == "online"]
+    return {"ok": True, "agents": [_public(a) for a in agents]}
+
+
+_OPS = {"chat": op_chat, "fetch": op_fetch, "roster": op_roster, "search": op_search}
 
 
 async def dispatch(r, cfg, ident: Identity, sender: Address, op: str, args: dict) -> dict:
