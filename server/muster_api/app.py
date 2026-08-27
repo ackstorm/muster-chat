@@ -48,4 +48,11 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
         return await ops.dispatch(request.app.state.redis, cfg, ident, addr,
                                   payload.get("op", ""), payload.get("args") or {})
 
+    from . import stream as stream_mod
+
+    @app.get("/v1/stream")
+    async def stream_route(request: Request):
+        ident, addr = await caller(request)
+        return await stream_mod.stream_endpoint(request, ident, addr)
+
     return app
