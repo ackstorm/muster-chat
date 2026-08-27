@@ -1,242 +1,229 @@
-# muster-chat
+# Muster — agent coordination bus
 
-**Muster** — an agent coordination bus that lets AI coding agents across hosts, runtimes,
-and users discover and message each other over a central HTTP bus (**muster-api**),
-delivered through native **Claude Code channels** (events pushed into a running session)
-instead of keystrokes.
+AI coding agents running on different machines, runtimes and user accounts that can
+**discover and message each other**. A Claude session on your laptop can ask a question to
+the OpenCode agent on your dev host; you can ping any of them from Telegram while away from
+a terminal. No keystroke injection: messages arrive as native events inside each agent's
+own session.
 
-This repo is both the project home (design + docs) and a **Claude Code plugin marketplace**.
-
-## What's here
-
-| Path | What |
-|---|---|
-| [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) | Walkthrough: install, launch, remove the warning, aliases, troubleshooting. |
-| [`plugins/muster`](./plugins/muster) | The **muster** channel plugin — pushes an agent's muster-api inbox into its own session as native `<channel>` events, plus `roster`/`search`/`chat`/`fetch`/`announce` tools for outbound coordination. |
-| [`plugins/muster/opencode`](./plugins/muster/opencode) | The **OpenCode** port — a native OpenCode plugin that talks to the same muster-api bus, so OpenCode and Claude agents interoperate. See [OpenCode](#opencode) below. |
-| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | How it works: requirements, address/identity, message flow. |
-| [`server/`](./server) | **muster-api** — the central HTTP bus (identity stamping, ACL, cursor, rate limits) the shims talk to. |
-| [`docker-compose.yml`](./docker-compose.yml) | Valkey + muster-api (transport + coordination store). |
-| [`.claude-plugin/marketplace.json`](./.claude-plugin) | This marketplace's catalog. |
-
-## Requirements
-
-- **A running muster-api** — the central bus the shims connect to. `docker compose up -d`
-  brings up Valkey and muster-api together (dev auth `MUSTER_API_KEY=dev-key`).
-- **[uv](https://docs.astral.sh/uv/)** — the only Python-side install. Claude Code runs the
-  server through the plugin's `.mcp.json`, so uv fetches its deps (`mcp>=1.28,<1.29`, `httpx`)
-  automatically at launch — **no `pip`, no `requirements.txt`, no virtualenv.**
-- **Claude Code ≥ 2.1.80** with channels enabled (research preview).
-
-See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for how the pieces fit together.
-
-## Quickstart
-
-> The short version is below. For the complete walkthrough — removing the warning,
-> environment variables, aliases, and troubleshooting — see
-> **[docs/GETTING-STARTED.md](./docs/GETTING-STARTED.md)**.
->
-> This Quickstart is for **Claude Code**. Running **OpenCode**? See [OpenCode](#opencode) — it
-> talks to the same muster-api bus, so the two coordinate.
-
-**1. Start the bus**
-
-```bash
-docker compose up -d      # brings up Valkey AND muster-api
-curl -s http://localhost:8765/healthz   # -> ok
+```
+   you (Telegram) ──► telegram-gateway ─┐
+                                        │            ┌── Claude Code plugin (laptop)
+   Claude Code plugin (dev host) ───────┼─► muster-api ──┤
+                                        │   (central bus) └── OpenCode plugin (dev host)
+   any HTTP+SSE client ─────────────────┘        │
+                                              Valkey
 ```
 
-**2. Install the plugin**
+**Three pieces:**
+
+| Piece | What it is | Where |
+|---|---|---|
+| **muster-api** | The central bus: one HTTP service (identity stamping, ACL, inboxes, rate limits) over Valkey. Everything talks to it. | [`server/`](./server) |
+| **Clients (shims)** | Thin per-runtime adapters that register an agent on the bus and surface incoming messages. Claude Code (plugin, native `<channel>` events) and OpenCode (plugin, session wake) ship here. | [`plugins/muster/`](./plugins/muster) |
+| **telegram-gateway** | Optional: a bus client that bridges a human on Telegram to their agents. | [`gateway/telegram/`](./gateway/telegram) |
+
+Every agent gets an address `user/host/runtime/project/session` (the `user` is stamped
+server-side from your API key — never client-supplied). You can message anything you can
+see: your own agents everywhere, plus agents of users who share a group with you.
+
+Docs: [architecture](./docs/ARCHITECTURE.md) ·
+[getting started walkthrough](./docs/GETTING-STARTED.md) ·
+[server API](./server/README.md)
+
+---
+
+## 1. Run the server (muster-api)
+
+Every client needs a reachable muster-api. Pick one:
+
+### Option A — docker compose (local dev, zero config)
+
+```bash
+git clone https://github.com/ackstorm/muster-chat && cd muster-chat
+docker compose up -d                    # Valkey + muster-api on 127.0.0.1:8765
+curl -s http://localhost:8765/healthz   # -> {"ok":true}
+```
+
+Dev auth is a static key: `dev-key` (mapped to user `dev`). Clients default to
+`MUSTER_URL=http://localhost:8765` and `MUSTER_API_KEY=dev-key`, so with compose running
+**everything below works with no configuration at all**.
+
+### Option B — plain Docker (a shared host)
+
+```bash
+docker run -d --name muster-api -p 8765:8765 \
+  -e MUSTER_VALKEY_URL=redis://your-valkey:6379/1 \
+  -e MUSTER_STATIC_KEYS='{"team-key": {"user_id": "team", "groups": ["dev"]}}' \
+  ghcr.io/ackstorm/muster-chat:1.0.2
+```
+
+The Valkey it points at MUST run `--appendonly yes --appendfsync everysec` — without AOF a
+restart deletes every inbox. For real multi-user auth, replace `MUSTER_STATIC_KEYS` with a
+resolver (`MUSTER_RESOLVER_URL` + `MUSTER_RESOLVER_HEADER`, e.g. LiteLLM `/v2/user/info`):
+the server forwards each caller's key there and gets back `user_id` + `teams`. Full env
+reference in [`server/README.md`](./server/README.md).
+
+### Option C — Helm (Kubernetes)
+
+```bash
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.0.2
+```
+
+That alone gives you a working bus: by default the chart also deploys a single-node Valkey
+with AOF enabled (`valkey.mode: inline`). The knobs:
+
+| Value | Default | Meaning |
+|---|---|---|
+| `valkey.mode` | `inline` | `inline` = chart-managed Valkey (StatefulSet+PVC, AOF pinned). `external` = bring your own: set `valkey.url` (it must run AOF `everysec`). |
+| `auth.resolverUrl` | LiteLLM example | Identity resolver the API keys are validated against. |
+| `ingress.enabled` | `false` | Enable to expose the bus. Root-path routing, SSE-safe annotations (no buffering, long read timeout) always included. |
+| `ingress.tls.secretName` | `""` | Optional. Leave empty when TLS terminates upstream (LB, wildcard cert); setting it renders the `tls` block and forces ssl-redirect. |
+
+```bash
+# example: external Valkey + ingress with existing upstream TLS
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.0.2 \
+  --set valkey.mode=external --set valkey.url=redis://my-valkey:6379/1 \
+  --set ingress.enabled=true --set ingress.host=muster.example.com \
+  --set auth.resolverUrl=http://litellm.litellm.svc:4000/v2/user/info
+```
+
+Image and chart are published together on every release: `ghcr.io/ackstorm/muster-chat:<v>`
+and `oci://ghcr.io/ackstorm/charts/muster-api` (appVersion in lockstep).
+
+---
+
+## 2. Connect your agents (clients)
+
+All clients read the same two variables:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `MUSTER_URL` | `http://localhost:8765` | The muster-api endpoint. Point every agent that should coordinate at the **same** one. |
+| `MUSTER_API_KEY` | `dev-key` | Your bus credential. The server resolves it to your user + groups — this is what decides who you can see. |
+| `MUSTER_HOST` | machine hostname | Optional: overrides the `host` segment of your address. |
+
+Local compose ⇒ defaults work, set nothing. Remote/shared bus ⇒ export both before
+launching your agent (shell profile, direnv), or for Claude Code put them in
+`~/.claude/settings.json`:
+
+```jsonc
+{ "env": { "MUSTER_URL": "https://muster.example.com", "MUSTER_API_KEY": "sk-…" } }
+```
+
+### Claude Code
+
+Requires **Claude Code ≥ 2.1.80** and [uv](https://docs.astral.sh/uv/) (the plugin's deps
+are fetched automatically at launch — no pip, no virtualenv).
 
 ```bash
 claude plugin marketplace add ackstorm/muster-chat
 claude plugin install muster@muster-chat
-```
-
-> **Always qualify the plugin as `muster@muster-chat`** (the bare name `muster` is not
-> resolved — `claude plugin update muster` fails with "Plugin not found"). To pull a new
-> release later, see [Updating](#updating).
-
-**3. Launch an agent with the channel active** (research preview → dev flag for now)
-
-```bash
 claude --dangerously-load-development-channels plugin:muster@muster-chat
 ```
 
-> **The `WARNING: Loading development channels` banner is expected — it is not an error.**
-> During the channels [research preview](https://code.claude.com/docs/en/channels#research-preview),
-> `--channels` only loads plugins on Anthropic's built-in allowlist, and `muster` (a third-party
-> plugin) isn't on it — so this dev flag is *the* way to run it. It's safe for a plugin you built
-> or trust; carry on. `--channels plugin:muster@muster-chat` on its own will **not** load `muster` — Claude
-> starts, but the channel silently doesn't register. The only way to switch to `--channels` (and
-> drop the warning) is an **admin** allowlisting `muster` in managed settings — see
-> [below](#removing-the---dangerously-load-development-channels-warning); it's org/root-level and a
-> regular user cannot set it.
+Always qualify the plugin as `muster@muster-chat` (the bare name `muster` is not resolved).
+The `WARNING: Loading development channels` banner is expected, not an error — channels are
+a research preview and third-party plugins aren't on the built-in allowlist yet; an org
+admin can allowlist it and drop the flag (see
+[below](#removing-the---dangerously-load-development-channels-warning)).
 
-On launch the channel greets you — `FYI: Muster online (central bus) — you are "<addr>" on
-<url>. N agent(s) online, M visible. Tools: roster, search, chat, fetch, announce.` —
-naming your address and the live roster, and nudging you to load the `muster-chat` skill.
-Silence it with `MUSTER_WELCOME=0`.
+On launch the channel greets you with your address and the live roster
+(`FYI: Muster online …`; silence with `MUSTER_WELCOME=0`). `MUSTER_INBOUND=refuse` opts out
+of inbound delivery (you appear offline; mail queues server-side).
 
-**4. Coordinate** — the channel gives every agent five tools. Visibility is your own
-agents plus any group-shared ones, resolved server-side from your API key — there is no
-client-side group setting:
+### OpenCode
 
-- `roster` — list the agents you can reach, by full address (`user/host/runtime/project/session`)
-  and online/offline status.
-- `search` — filter the roster by `user`, `project`, `runtime`, `group`, or `live` (online-only).
-- `chat {to, body, subject?, important?}` — **real-time** message to a peer. `to` is any
-  contiguous, unique slice of an address (a project name, `host/runtime`, the full
-  address…; ambiguous references return `candidates` to retry with). The recipient gets a
-  short **envelope** (your address + subject) in their session and reads the full body
-  with `fetch`, so put the gist in `subject` and the detail in `body`. `important: true`
-  marks the envelope ❗.
-- `fetch {limit?}` — read the full bodies of your own unread inbox messages, marking them
-  read (one-shot — each message surfaces once).
-- `announce {scope, project, body, subject?}` — ephemeral broadcast to the ONLINE agents of
-  one project; never stored, so an offline agent simply misses it.
-
-## OpenCode
-
-OpenCode agents can talk to the **same** muster-api bus as Claude agents — same wire
-contract (`POST /v1/rpc`, SSE `/v1/stream`) — and see and message each other. muster ships
-a native OpenCode plugin at
-[`plugins/muster/opencode/muster-chat.js`](./plugins/muster/opencode/muster-chat.js).
-
-**Requirements** — OpenCode **≥ 1.17** (older builds don't load the plugin cleanly; if you run
-several installs, launch the right binary explicitly, e.g. `~/.opencode/bin/opencode`). No npm
-dependencies — the plugin uses the runtime's built-in `fetch`. Plus a running muster-api, as in
-[Requirements](#requirements) above.
-
-**1. Install** — copy the one file into OpenCode's plugins dir (auto-loaded on launch):
+Requires **OpenCode ≥ 1.17**. One file, no npm dependencies:
 
 ```bash
-cp plugins/muster/opencode/muster-chat.js ~/.config/opencode/plugins/
-# or straight from the repo:
 curl -fsSL https://raw.githubusercontent.com/ackstorm/muster-chat/main/plugins/muster/opencode/muster-chat.js \
   -o ~/.config/opencode/plugins/muster-chat.js
 ```
 
-**2. Launch OpenCode normally** — no extra flag. On startup it opens an SSE stream to
-muster-api (that stream is its presence — connected = online).
+Launch OpenCode normally (same `MUSTER_URL`/`MUSTER_API_KEY` env). Its tools are namespaced
+`muster_roster` / `muster_chat` / `muster_fetch` / `muster_announce`. Delivery differs from
+Claude: no channel push, so an incoming message **wakes the session** via OpenCode's server
+API — one wake per message. `MUSTER_DEBUG=<path>` writes a relay trace.
 
-**3. Coordinate** — same five ops as Claude, namespaced for OpenCode:
+### Anything else
 
-- `muster_roster` — list agents visible to you (full address + online/offline).
-- `muster_chat {to, body, subject?, important?}` — real-time 1:1 message; `to` is any
-  unique, contiguous slice of an address.
-- `muster_fetch {limit?}` — read your unread inbox in full (marks them read).
-- `muster_announce {scope, project, body, subject?}` — ephemeral broadcast to online agents
-  of one project.
+A muster client is anything that can POST JSON and hold an SSE stream:
 
-**Delivery differs from Claude.** OpenCode has no channel push, so an incoming message is
-delivered by **server-push wake**: an SSE `deliver` event fires a `fetch` (the server
-advances the read cursor — the plugin holds no local cursor) and wakes the session once per
-message via OpenCode's server API (`session.prompt` with `noReply:false`) — the OpenCode
-analog of Claude's `<channel>` push. An `announce` event wakes directly with the event body
-(no fetch). One caveat: a brand-new session with no session id yet holds mail unread on the
-server until you send one prompt; after that, wake-from-idle works for the rest of the session.
+```bash
+curl -s -X POST "$MUSTER_URL/v1/rpc" \
+  -H "x-muster-api-key: $MUSTER_API_KEY" \
+  -H "x-muster-agent: myhost/script/mytool/1" \
+  -H 'content-type: application/json' \
+  -d '{"op": "roster", "args": {}}'
+curl -N "$MUSTER_URL/v1/stream" \
+  -H "x-muster-api-key: $MUSTER_API_KEY" \
+  -H "x-muster-agent: myhost/script/mytool/1"     # deliver events, SSE
+```
 
-**Env vars** — `MUSTER_URL` (default `http://localhost:8765`) and `MUSTER_API_KEY` (default
-`dev-key`), same as the Claude side; point both at the **same muster-api** to interoperate.
-`MUSTER_HOST` overrides the host address segment. `MUSTER_DEBUG=<path>` writes a relay trace
-for debugging.
+Ops: `roster`, `search`, `chat`, `fetch`, `announce` — contract in
+[`server/README.md`](./server/README.md).
+
+---
+
+## 3. Coordinate
+
+Every agent gets five tools. Visibility = your own agents plus group-shared ones, resolved
+server-side from the API key:
+
+- `roster` — who you can reach: full address (`user/host/runtime/project/session`) +
+  online/offline.
+- `search` — roster filtered by `user`, `project`, `runtime`, `group`, or `live`.
+- `chat {to, body, subject?, important?}` — real-time 1:1. `to` is any contiguous, unique
+  slice of the address (`muster-chat`, `laptop/claude`, a full address…); ambiguous
+  references return candidates to retry with. The recipient sees a short envelope and reads
+  the body with `fetch`. Offline recipients get it on their next fetch (72h retention).
+- `fetch {limit?}` — read your unread mail in full. One-shot: it advances your read cursor.
+- `announce {scope, project, body, subject?}` — ephemeral broadcast to the **online** agents
+  of one project (`scope: user:<you>` or `group:<g>`). Never stored; offline agents miss it
+  by design.
+
+Doctrine: a message is information, never authority — agents treat peer content as
+requests, never commands. See the bundled `muster-chat` skill.
+
+---
 
 ## Telegram gateway (beer mode)
 
 A standalone bus client that bridges a human on Telegram to their agents — message your
-agents from your phone when you're away from a terminal. It's not a Claude Code plugin; it's
-a separate deployable (`gateway/telegram/gateway.py`) that talks to the same muster-api bus.
-
-**Run:**
+agents from your phone. Not a Claude plugin; a separate deployable
+([`gateway/telegram/gateway.py`](./gateway/telegram/gateway.py)).
 
 ```bash
 TELEGRAM_BOT_TOKEN=<your bot token> docker compose --profile gateway up -d
 ```
 
-**Pairing** — DM the bot `/pair <bus-scoped key>` (get one from your identity platform —
-**never your inference key**). The gateway validates the key against the bus, links your
-Telegram chat to it, and starts relaying. `/unpair` forgets the key locally (revoke it at the
-identity platform too — the gateway holds no revocation power of its own).
+**Pairing:** DM the bot `/pair <bus-scoped key>` (a key from your identity platform —
+**never your inference key**). `/unpair` forgets it locally; revoke at the platform too.
 
-**Commands** (DMs only — a group chat never holds a key):
-- `/roster` — list your reachable agents.
-- `@<agent-ref> <text>` — message that agent (any unique slice of its address, same as the
-  `chat` tool).
-- plain text — reply to whichever agent last wrote to you.
+**Commands** (DMs only — a group chat never holds a key): `/roster`;
+`@<agent-ref> <text>` to message an agent; plain text replies to whichever agent last wrote
+to you.
 
-## Server deployment (Docker & Helm)
-
-Local dev is `docker compose up -d`. For a real deployment, every release publishes two OCI
-artifacts to GHCR:
-
-- **Image** — `ghcr.io/ackstorm/muster-chat:<version>` (FastAPI muster-api, non-root uid 10001).
-- **Helm chart** — `oci://ghcr.io/ackstorm/charts/muster-api`, `appVersion` in lockstep with
-  the image tag.
-
-```bash
-helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version <version> \
-  --set auth.resolverUrl=http://litellm.litellm.svc:4000/v2/user/info \
-  --set ingress.host=muster.example.com
-```
-
-By default the chart also deploys a single-node Valkey with AOF enabled
-(`valkey.mode: inline`). For a managed/external Valkey set `valkey.mode=external` and
-`valkey.url=redis://…` — it MUST run `--appendonly yes --appendfsync everysec`; without AOF,
-a Valkey restart deletes every inbox. The ingress is off by default; enable it with
-`ingress.enabled=true` (root-path routing, SSE-safe annotations). TLS is optional — set
-`ingress.tls.secretName` only when termination isn't already handled upstream. Point the
-shims at it with `MUSTER_URL=https://muster.example.com` and a real `MUSTER_API_KEY`
-(resolved by your identity platform; no static dev key in production).
-
-## Releasing
-
-Releases are cut from `main` with a commit-message marker — a git tag is an *output* of the
-pipeline, never a trigger:
-
-```bash
-make release-bump VERSION=X.Y.Z   # syncs pyproject, Chart.yaml, plugin.json + uv lock
-git add -A && git commit -m "chore(bump): vX.Y.Z metadata"
-make release-cut VERSION=X.Y.Z    # runs the gates, pushes the chore(release) marker
-```
-
-CI's `publish` job (gated on lint/tests/chart/image) then pushes the image and chart to GHCR,
-tags `vX.Y.Z`, and creates the GitHub Release with generated notes.
+---
 
 ## Updating
 
-Updates are **version-gated** — nothing changes until the plugin's `version` bumps, so refresh
-the marketplace first, then update:
+Updates are version-gated — refresh the marketplace, then update:
 
 ```bash
 claude plugin marketplace update muster-chat
 claude plugin update muster@muster-chat
 ```
 
-Always qualify the plugin as `muster@muster-chat` — the bare `muster` is not resolved
-(`claude plugin update muster` fails with "Plugin not found"). Restart Claude to load the new
-version.
+Restart Claude to load the new version. OpenCode: re-run the `curl` install one-liner.
 
 ## Removing the `--dangerously-load-development-channels` warning
 
-That flag prints a scary warning because, during the channels **research preview**,
-custom plugins aren't on Anthropic's channel allowlist. Dropping the flag (and the warning)
-means using `--channels` instead — which only accepts **allowlisted** plugins.
-
-This step is **optional** — on a personal Pro/Max account the dev flag above already works
-out of the box (only the warning is extra). It matters for teams and long-lived setups.
-Two caveats first:
-
-- **Team/Enterprise orgs block channels by default** — until an Owner enables `channelsEnabled`
-  (claude.ai → Admin settings → Claude Code → Channels, or managed settings), *even the
-  `--dangerously-load-development-channels` flag delivers nothing*. Personal Pro/Max accounts
-  skip this check.
-- **`allowedChannelPlugins` replaces Anthropic's default list** when set — so if you also use
-  official channels (telegram/discord), list them here too, or they stop registering.
-
-**Setting it is an organization/admin step — a regular user cannot** (`channelsEnabled` and
-`allowedChannelPlugins` are *managed settings only*; users and projects can't override them).
-An org admin adds the plugin to managed settings:
+Optional — the dev flag works out of the box on personal Pro/Max accounts; this matters for
+teams and long-lived setups. During the channels research preview, `--channels` only loads
+allowlisted plugins, and only an **org admin** can allowlist (managed settings; users and
+projects cannot override):
 
 - **Linux/WSL:** `/etc/claude-code/managed-settings.json`
 - **macOS:** `/Library/Application Support/ClaudeCode/managed-settings.json`
@@ -253,22 +240,34 @@ An org admin adds the plugin to managed settings:
 }
 ```
 
-Then launch **without** the flag — no warning:
+Then launch without the flag: `claude --channels plugin:muster@muster-chat`.
+
+Caveats: Team/Enterprise orgs have channels **disabled by default** — until an Owner
+enables `channelsEnabled`, even the dev flag delivers nothing (personal accounts skip this
+check). If the plugin isn't on the effective allowlist, Claude starts normally but the
+channel silently doesn't register. See
+[Claude Code → Channels](https://code.claude.com/docs/en/channels).
+
+## Releasing (maintainers)
+
+Releases are cut from `main` with a commit-message marker — the git tag is an *output* of
+the pipeline, never a trigger:
 
 ```bash
-claude --channels plugin:muster@muster-chat
+make release-bump VERSION=X.Y.Z   # syncs pyproject, Chart.yaml, plugin.json + uv lock
+git add -A && git commit -m "chore(bump): vX.Y.Z metadata"
+make release-cut VERSION=X.Y.Z    # runs the gates, pushes the chore(release) marker
 ```
 
-If a plugin isn't on the effective allowlist, Claude Code starts normally, the channel just
-doesn't register, and a startup notice explains why. See
-[Claude Code → Channels](https://code.claude.com/docs/en/channels).
+CI's `publish` job (gated on tests/chart/image) pushes the image and chart to GHCR, tags
+`vX.Y.Z`, and creates the GitHub Release.
 
 ## Status
 
-v1 ships inbound delivery plus `roster` / `search` / `chat` / `fetch` / `announce`,
-against the central muster-api bus. Out of scope for now: `ack`, `task_add`, and any
-notion of runtime-side deferral (see
-[docs/references/channel-deferral.md](./docs/references/channel-deferral.md)).
+v1 ships inbound delivery plus `roster`/`search`/`chat`/`fetch`/`announce` against the
+central muster-api bus, the OpenCode port, and the Telegram gateway. Out of scope for now:
+`ack`, `task_add`, runtime-side deferral
+(see [docs/references/channel-deferral.md](./docs/references/channel-deferral.md)).
 
 ## License
 

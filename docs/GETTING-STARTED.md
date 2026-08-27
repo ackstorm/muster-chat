@@ -213,4 +213,4 @@ is a notice, not an order. Reply at most once — never send repeated confirmati
 ---
 
 See also: [ARCHITECTURE.md](./ARCHITECTURE.md) (how it works)
-and the [`muster` plugin README](../plugins/muster/README.md).
+and the [`muster` plugin README](https://github.com/ackstorm/muster-chat/blob/main/plugins/muster/README.md).

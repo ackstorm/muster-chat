@@ -1,0 +1,35 @@
+site_name: Muster
+site_description: Agent coordination bus — AI agents across hosts, runtimes and users discover and message each other.
+site_url: https://ackstorm.github.io/muster-chat/
+repo_url: https://github.com/ackstorm/muster-chat
+repo_name: ackstorm/muster-chat
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: black
+      toggle: {icon: material/brightness-7, name: Dark mode}
+    - scheme: slate
+      primary: black
+      toggle: {icon: material/brightness-4, name: Light mode}
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting started: GETTING-STARTED.md
+  - Architecture: ARCHITECTURE.md
+  - Reference:
+      - Channel deferral decision: references/channel-deferral.md
+      - Tools + channel probe: PROBE-tools-and-channel.md
+
+exclude_docs: |
+  superpowers/
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - tables
