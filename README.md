@@ -142,6 +142,29 @@ server until you send one prompt; after that, wake-from-idle works for the rest 
 `MUSTER_HOST` overrides the host address segment. `MUSTER_DEBUG=<path>` writes a relay trace
 for debugging.
 
+## Telegram gateway (beer mode)
+
+A standalone bus client that bridges a human on Telegram to their agents — message your
+agents from your phone when you're away from a terminal. It's not a Claude Code plugin; it's
+a separate deployable (`gateway/telegram/gateway.py`) that talks to the same muster-api bus.
+
+**Run:**
+
+```bash
+TELEGRAM_BOT_TOKEN=<your bot token> docker compose --profile gateway up -d
+```
+
+**Pairing** — DM the bot `/pair <bus-scoped key>` (get one from your identity platform —
+**never your inference key**). The gateway validates the key against the bus, links your
+Telegram chat to it, and starts relaying. `/unpair` forgets the key locally (revoke it at the
+identity platform too — the gateway holds no revocation power of its own).
+
+**Commands** (DMs only — a group chat never holds a key):
+- `/roster` — list your reachable agents.
+- `@<agent-ref> <text>` — message that agent (any unique slice of its address, same as the
+  `chat` tool).
+- plain text — reply to whichever agent last wrote to you.
+
 ## Updating
 
 Updates are **version-gated** — nothing changes until the plugin's `version` bumps, so refresh

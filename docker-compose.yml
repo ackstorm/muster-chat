@@ -32,5 +32,19 @@ services:
       valkey:
         condition: service_healthy
     restart: unless-stopped
+  telegram-gateway:
+    build:
+      context: .
+      dockerfile: gateway/telegram/Dockerfile
+    profiles: ["gateway"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      MUSTER_URL: http://muster-api:8765
+    volumes:
+      - telegram-pairings:/data
+    depends_on:
+      - muster-api
+    restart: unless-stopped
 volumes:
   muster_valkey_data:
+  telegram-pairings:
