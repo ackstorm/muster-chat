@@ -20,7 +20,19 @@ async def caller(request: Request) -> tuple:
 
 def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
     cfg = cfg or config_mod.load(os.environ)
-    app = FastAPI(title="muster-api")
+
+    import asyncio
+    from contextlib import asynccontextmanager
+
+    from . import reaper
+
+    @asynccontextmanager
+    async def lifespan(app):
+        task = asyncio.create_task(reaper.run_forever(app.state.redis))
+        yield
+        task.cancel()
+
+    app = FastAPI(title="muster-api", lifespan=lifespan)
     app.state.cfg = cfg
     app.state.redis = redis.from_url(cfg.valkey_url, decode_responses=True)
     app.state.auth = Authenticator(cfg)
