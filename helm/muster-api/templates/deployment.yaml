@@ -10,9 +10,13 @@ spec:
     metadata:
       labels: {app: {{ .Release.Name }}}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001        # must match the Dockerfile's useradd uid
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: muster-api
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           ports: [{containerPort: 8765}]
           env:
             - {name: MUSTER_VALKEY_URL, value: {{ .Values.valkeyUrl | quote }}}
@@ -20,5 +24,8 @@ spec:
             - {name: MUSTER_RESOLVER_HEADER, value: {{ .Values.auth.resolverHeader | quote }}}
             - {name: MUSTER_USER_FIELD, value: {{ .Values.auth.userField | quote }}}
             - {name: MUSTER_GROUPS_FIELD, value: {{ .Values.auth.groupsField | quote }}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
           readinessProbe:
             httpGet: {path: /healthz, port: 8765}

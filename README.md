@@ -165,6 +165,40 @@ identity platform too — the gateway holds no revocation power of its own).
   `chat` tool).
 - plain text — reply to whichever agent last wrote to you.
 
+## Server deployment (Docker & Helm)
+
+Local dev is `docker compose up -d`. For a real deployment, every release publishes two OCI
+artifacts to GHCR:
+
+- **Image** — `ghcr.io/ackstorm/muster-chat:<version>` (FastAPI muster-api, non-root uid 10001).
+- **Helm chart** — `oci://ghcr.io/ackstorm/charts/muster-api`, `appVersion` in lockstep with
+  the image tag.
+
+```bash
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version <version> \
+  --set auth.resolverUrl=http://litellm.litellm.svc:4000/v2/user/info \
+  --set ingress.host=muster.example.com
+```
+
+The chart deploys muster-api only. It expects a reachable Valkey (`valkeyUrl`) running with
+**AOF enabled** (`--appendonly yes --appendfsync everysec`) — without AOF, a Valkey restart
+deletes every inbox. Point the shims at it with `MUSTER_URL=https://muster.example.com` and a
+real `MUSTER_API_KEY` (resolved by your identity platform; no static dev key in production).
+
+## Releasing
+
+Releases are cut from `main` with a commit-message marker — a git tag is an *output* of the
+pipeline, never a trigger:
+
+```bash
+make release-bump VERSION=X.Y.Z   # syncs pyproject, Chart.yaml, plugin.json + uv lock
+git add -A && git commit -m "chore(bump): vX.Y.Z metadata"
+make release-cut VERSION=X.Y.Z    # runs the gates, pushes the chore(release) marker
+```
+
+CI's `publish` job (gated on lint/tests/chart/image) then pushes the image and chart to GHCR,
+tags `vX.Y.Z`, and creates the GitHub Release with generated notes.
+
 ## Updating
 
 Updates are **version-gated** — nothing changes until the plugin's `version` bumps, so refresh

@@ -1,0 +1,131 @@
+# One workflow for CI and publish. Publish is a job in THIS workflow gated by
+# `needs:` on the real test/image jobs and triggered by a `chore(release): vX.Y.Z`
+# commit-message marker — never by a tag push. (Pattern proven in the sibling
+# ach-memory repo: a separate tag/workflow_run release raced CI and shipped a
+# version with a failing image test. A tag here is an OUTPUT of publish, not a
+# trigger.) Cut releases with `make release-cut VERSION=X.Y.Z`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    services:
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run server tests
+        run: |
+          uv run --with redis --with anyio --with pytest --with pytest-asyncio \
+            --with fastapi --with httpx --with uvicorn --no-project \
+            pytest server/tests -q
+
+  test-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # No muster-api service here: test_integration.py self-skips when the API
+      # is down; the live path is covered by the `image` job's smoke instead.
+      - name: Run plugin + gateway tests
+        run: |
+          uv run --with httpx --with anyio --with pytest --with 'mcp>=1.28,<1.29' \
+            --no-project pytest plugins/muster/tests -q
+          uv run --with httpx --with pytest --no-project pytest gateway/tests -q
+
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint the chart
+        run: helm lint helm/muster-api
+      - name: Render and assert hardening + image wiring
+        run: |
+          out=$(helm template muster helm/muster-api)
+          echo "$out" | grep -q 'image: "ghcr.io/ackstorm/muster-chat:' || { echo "image not wired to GHCR/appVersion"; exit 1; }
+          echo "$out" | grep -q 'runAsNonRoot: true' || { echo "missing runAsNonRoot"; exit 1; }
+          echo "$out" | grep -q 'runAsUser: 10001' || { echo "missing runAsUser 10001"; exit 1; }
+
+  image:
+    runs-on: ubuntu-latest
+    services:
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t muster-api:ci server
+      - name: Run it and hit an authenticated endpoint
+        # Not just /healthz: the rpc call exercises auth + Valkey, the two paths
+        # that can crash-loop a green-looking image.
+        run: |
+          docker run -d --name api --network host \
+            -e MUSTER_VALKEY_URL=redis://localhost:6379/1 \
+            -e MUSTER_STATIC_KEYS='{"ci-key": {"user_id": "ci", "groups": ["ci"]}}' \
+            muster-api:ci
+          ok=0
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8765/healthz >/dev/null && { ok=1; break; }
+            sleep 1
+          done
+          [ "$ok" = 1 ] || { echo "healthz never came up"; docker logs api; exit 1; }
+          curl -sf -X POST http://localhost:8765/v1/rpc \
+            -H 'content-type: application/json' \
+            -H 'x-muster-api-key: ci-key' \
+            -H 'x-muster-agent: ci-host/ci/ci/1' \
+            -d '{"op": "roster", "args": {}}' | grep -q '"ok"' \
+            || { echo "authenticated rpc failed"; docker logs api; exit 1; }
+
+  publish:
+    # Gated on every real gate above; fires only on the release marker commit.
+    needs: [test-server, test-plugin, chart, image]
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(release): v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # git tag + GitHub Release
+      packages: write   # GHCR image + chart
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Parse the version from the release marker
+        run: |
+          msg='${{ github.event.head_commit.message }}'
+          version=$(echo "$msg" | head -1 | sed -n 's/^chore(release): v\([0-9][0-9.]*[0-9]\)$/\1/p')
+          [ -n "$version" ] || { echo "marker present but version failed strict parse: $msg"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Log in to GHCR (docker and helm keep separate credential stores)
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo '${{ secrets.GITHUB_TOKEN }}' | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push the image
+        run: |
+          docker build --build-arg GIT_SHA=${{ github.sha }} \
+            -t "ghcr.io/ackstorm/muster-chat:${VERSION}" server
+          docker push "ghcr.io/ackstorm/muster-chat:${VERSION}"
+      - name: Package and push the chart (OCI)
+        run: |
+          helm package helm/muster-api --version "$VERSION" --app-version "$VERSION"
+          helm push "muster-api-${VERSION}.tgz" oci://ghcr.io/ackstorm/charts
+      - name: Tag the release commit (idempotent)
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag "v${VERSION}" || true
+          git push origin "v${VERSION}" || true
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes

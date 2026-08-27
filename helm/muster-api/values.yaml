@@ -1,6 +1,6 @@
 image:
-  repository: muster-api
-  tag: "0.1.0"
+  repository: ghcr.io/ackstorm/muster-chat
+  tag: ""   # defaults to .Chart.AppVersion
 replicas: 2
 # target Valkey MUST run --appendonly yes --appendfsync everysec (spec §16) —
 # without AOF, durable unicast (inbox/cursor survival across restarts) is void.
