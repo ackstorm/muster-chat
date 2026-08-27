@@ -15,7 +15,9 @@ class BusError(Exception):
 
 async def parse_sse(lines):
     """Parse an async iterator of text lines into event dicts {"_event": name, **data}.
-    Comment frames (': ping') and events without data are dropped. Malformed JSON data
+    Comment frames (': ping') yield a bare {"_event": "_ping"} — callers that ignore
+    non-"deliver" events still see one per ping, which lets a relay reset its reconnect
+    backoff on a healthy idle stream, not only on real events. Malformed JSON data
     yields an empty payload rather than raising — one bad frame must not kill the relay."""
     event, data = None, []
     async for line in lines:
@@ -27,11 +29,13 @@ async def parse_sse(lines):
                     payload = {}
                 yield {"_event": event, **payload}
             event, data = None, []
+        elif line.startswith(":"):
+            yield {"_event": "_ping"}
         elif line.startswith("event:"):
             event = line[len("event:"):].strip()
         elif line.startswith("data:"):
             data.append(line[len("data:"):].strip())
-        # anything else (comments, unknown fields): ignored per SSE spec
+        # anything else (unknown fields): ignored per SSE spec
 
 
 class MusterClient:

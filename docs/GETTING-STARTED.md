@@ -128,9 +128,11 @@ server-side from your `MUSTER_API_KEY` — you never set it. `roster`/`search` s
 agents on every host, plus any group-shared ones (`group:<g>` in `announce`'s `scope`); this
 is a hard boundary enforced by muster-api, not something the shim configures.
 
-`to` (for `chat`) and `project`/`scope` filters accept any contiguous, unique slice of an
-address — a bare project name, `host/runtime`, or the full address. An ambiguous reference
-returns `candidates`; retry with a longer, more specific slice.
+`to` (for `chat`) accepts any contiguous, unique slice of an address — a bare project
+name, `host/runtime`, or the full address. An ambiguous reference returns `candidates`;
+retry with a longer, more specific slice. `search` filters and `announce`'s `project`
+match a segment exactly (no slice matching), and `scope` must be exactly `user:<you>` or
+`group:<g>`.
 
 ## 5. Environment variables
 

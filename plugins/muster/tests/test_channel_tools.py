@@ -40,7 +40,8 @@ async def test_offline_notice(monkeypatch):
 
 
 def test_render_deliver_kinds():
-    assert mc._render_deliver({"kind": "chat", "envelope": "✉ hi", "important": True}).startswith("❗")
+    # server's envelope already carries the ❗ mark when important — _render_deliver must not add a second one
+    assert mc._render_deliver({"kind": "chat", "envelope": "❗ ✉ hi", "important": True}) == "❗ ✉ hi"
     assert "📢" in mc._render_deliver({"kind": "announce", "from": "u/h/r/p/s", "body": "release in 5"})
     assert "3 unread" in mc._render_deliver({"kind": "unread", "count": 3})
     assert mc._render_deliver({"kind": "??"}) is None

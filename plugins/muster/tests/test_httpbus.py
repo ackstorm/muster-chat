@@ -13,14 +13,16 @@ async def _collect(items):
 
 
 @pytest.mark.anyio
-async def test_parses_events_and_ignores_pings():
+async def test_parses_events_and_yields_pings():
+    # pings surface as a bare _ping marker (not dropped) so a relay can reset its
+    # reconnect backoff on a healthy idle stream, not only on real events.
     evs = await _collect([
         "event: deliver", 'data: {"kind": "chat", "msg_id": "1-0", "envelope": "hi"}', "",
         ": ping", "",
         "event: deliver", 'data: {"kind": "unread", "count": 3}', "",
     ])
-    assert [e["_event"] for e in evs] == ["deliver", "deliver"]
-    assert evs[0]["msg_id"] == "1-0" and evs[1]["count"] == 3
+    assert [e["_event"] for e in evs] == ["deliver", "_ping", "deliver"]
+    assert evs[0]["msg_id"] == "1-0" and evs[2]["count"] == 3
 
 
 @pytest.mark.anyio

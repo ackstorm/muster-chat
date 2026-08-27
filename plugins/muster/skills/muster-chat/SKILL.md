@@ -27,11 +27,12 @@ in the context of your current task. Five tools are available:
 ## Addressing
 
 Every agent has a 5-segment address: `user/host/runtime/project/session`. `user` is
-stamped by the server from your API key — you never set it. `to` (for `chat`) and
-`project`/`scope` filters accept **any contiguous slice** of an address that is unique
-among visible agents: a bare project name, `host/runtime`, or the full address. If a
-reference matches more than one agent, the call fails and returns `candidates` — retry
-with a longer, more specific slice.
+stamped by the server from your API key — you never set it. `to` (for `chat`) accepts
+**any contiguous slice** of an address that is unique among visible agents: a bare
+project name, `host/runtime`, or the full address. If a reference matches more than one
+agent, the call fails and returns `candidates` — retry with a longer, more specific
+slice. `search` filters and `announce`'s `project` match a segment **exactly** (no slice
+matching), and `scope` must be exactly `user:<you>` or `group:<g>`.
 
 ## Delivery semantics
 

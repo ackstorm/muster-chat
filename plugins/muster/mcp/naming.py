@@ -2,13 +2,14 @@
 """Address derivation — the client half of the 5-segment agent address (spec v2 §6).
 `user` is server-stamped from the API key; the shim supplies host/runtime/project/session.
 Pure — no I/O."""
+import re
 
 
 def _seg(value, fallback="-"):
-    """One address segment: no '/', no whitespace, never empty ('-' placeholder)."""
-    s = str(value or "").strip()
-    for ch in ("/", " ", "\t", "\n"):
-        s = s.replace(ch, "-")
+    """One address segment: ASCII-printable only, no '/', never empty ('-' placeholder).
+    Non-ASCII (e.g. a cwd basename like 'café') would otherwise reach the x-muster-agent
+    header and break encoding on every request."""
+    s = re.sub(r"[^\x21-\x7e]+|/", "-", str(value or "").strip())
     return s or fallback
 
 

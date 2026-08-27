@@ -12,6 +12,7 @@ Fail-safe: if muster-api is unreachable the MCP handshake still completes, tools
 an offline notice, and the relay retries with backoff. Run via `uv run --with mcp --with httpx`.
 """
 import collections
+import contextlib
 import os
 import socket
 import sys
@@ -194,7 +195,7 @@ def _render_deliver(ev):
     inbox); unread = coalesced backlog nudge on (re)connect."""
     kind = ev.get("kind")
     if kind == "chat":
-        return ("❗ " if ev.get("important") else "") + (ev.get("envelope") or "✉ new muster message — fetch for full")
+        return ev.get("envelope") or "✉ new muster message — fetch for full"
     if kind == "announce":
         subj = f" [{ev['subject']}]" if ev.get("subject") else ""
         return f"📢 Announce from {ev.get('from', '?')}{subj}: {ev.get('body', '')}"
@@ -226,26 +227,27 @@ async def relay(session):
     while True:
         try:
             log(f"stream connect {URL} as {AGENT}")
-            async for ev in client.stream():
-                backoff = 1
-                if ev["_event"] == "error":
-                    log(f"stream closed by server: {ev.get('code')} {ev.get('message')}")
-                    break
-                if ev["_event"] != "deliver":
-                    continue
-                mid = ev.get("msg_id")
-                if mid:                      # announce events have no msg_id — never dedup them
-                    if mid in seen:
+            async with contextlib.aclosing(client.stream()) as evs:
+                async for ev in evs:
+                    backoff = 1
+                    if ev["_event"] == "error":
+                        log(f"stream closed by server: {ev.get('code')} {ev.get('message')}")
+                        break
+                    if ev["_event"] != "deliver":
                         continue
-                    seen[mid] = None
-                    while len(seen) > 256:
-                        seen.popitem(last=False)
-                content = _render_deliver(ev)
-                if content:
-                    try:
-                        await _push(session, content, {"agent": AGENT, "msg_id": mid or ""})
-                    except Exception as e:
-                        log(f"push error {e!r}; nudge dropped (unread event will re-cover)")
+                    mid = ev.get("msg_id")
+                    if mid:                      # announce events have no msg_id — never dedup them
+                        if mid in seen:
+                            continue
+                        seen[mid] = None
+                        while len(seen) > 256:
+                            seen.popitem(last=False)
+                    content = _render_deliver(ev)
+                    if content:
+                        try:
+                            await _push(session, content, {"agent": AGENT, "msg_id": mid or ""})
+                        except Exception as e:
+                            log(f"push error {e!r}; nudge dropped (unread event will re-cover)")
         except Exception as e:
             log(f"stream error {e!r}; reconnect in {backoff}s")
         await anyio.sleep(backoff)
