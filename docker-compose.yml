@@ -20,5 +20,17 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+  muster-api:
+    build: ./server
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      MUSTER_VALKEY_URL: redis://valkey:6379/1
+      # local-dev static keys (spec §16): no LiteLLM needed
+      MUSTER_STATIC_KEYS: '{"dev-key": {"user_id": "dev", "groups": ["local"]}}'
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
 volumes:
   muster_valkey_data:

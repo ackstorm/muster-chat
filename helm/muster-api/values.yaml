@@ -1,0 +1,14 @@
+image:
+  repository: muster-api
+  tag: "0.1.0"
+replicas: 2
+valkeyUrl: redis://muster-valkey:6379/1
+auth:
+  resolverUrl: http://litellm.litellm.svc:4000/v2/user/info
+  resolverHeader: x-litellm-api-key
+  userField: user_id
+  groupsField: teams
+ingress:
+  enabled: true
+  host: muster.example.com
+  className: nginx

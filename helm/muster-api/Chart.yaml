@@ -1,0 +1,5 @@
+apiVersion: v2
+name: muster-api
+description: Muster central agent coordination bus
+version: 0.1.0
+appVersion: "0.1.0"
