@@ -53,7 +53,7 @@ Dev auth is a static key: `dev-key` (mapped to user `dev`). Clients default to
 docker run -d --name muster-api -p 8765:8765 \
   -e MUSTER_VALKEY_URL=redis://your-valkey:6379/1 \
   -e MUSTER_STATIC_KEYS='{"team-key": {"user_id": "team", "groups": ["dev"]}}' \
-  ghcr.io/ackstorm/muster-chat:1.0.2
+  ghcr.io/ackstorm/muster-chat:1.2.1
 ```
 
 The Valkey it points at MUST run `--appendonly yes --appendfsync everysec` — without AOF a
@@ -65,7 +65,7 @@ reference in [`server/README.md`](./server/README.md).
 ### Option C — Helm (Kubernetes)
 
 ```bash
-helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.0.2
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.2.1
 ```
 
 That alone gives you a working bus: by default the chart also deploys a single-node Valkey
@@ -85,7 +85,7 @@ with AOF enabled (`valkey.mode: inline`). The knobs:
 
 ```bash
 # example: external Valkey + ingress with existing upstream TLS
-helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.0.2 \
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.2.1 \
   --set valkey.mode=external --set valkey.url=redis://my-valkey:6379/1 \
   --set ingress.enabled=true --set ingress.host=muster.example.com \
   --set auth.resolverUrl=http://litellm.litellm.svc:4000/v2/user/info
@@ -125,7 +125,7 @@ Notes from that deployment:
 
 #### Upgrading a live release
 
-`--version 1.2.0` introduces no breaking values changes. If you were on 1.1.0 passing the
+`--version 1.2.1` introduces no breaking values changes since 1.1.0. If you were on 1.1.0 passing the
 Valkey password with the `envFrom` + `$(VAR)` pattern, you can keep it — or migrate to the
 supported form, which fails at render instead of at runtime:
 
@@ -171,7 +171,7 @@ Always qualify the plugin as `muster@muster-chat` (the bare name `muster` is not
 The `WARNING: Loading development channels` banner is expected, not an error — channels are
 a research preview and third-party plugins aren't on the built-in allowlist yet; an org
 admin can allowlist it and drop the flag (see
-[below](#removing-the---dangerously-load-development-channels-warning)).
+[below](#launching-without-the-development-flag)).
 
 On launch the channel greets you with your address and the live roster
 (`FYI: Muster online …`; silence with `MUSTER_WELCOME=0`). `MUSTER_INBOUND=refuse` opts out
@@ -264,12 +264,26 @@ claude plugin update muster@muster-chat
 
 Restart Claude to load the new version. OpenCode: re-run the `curl` install one-liner.
 
-## Removing the `--dangerously-load-development-channels` warning
+## Launching without the development flag
 
-Optional — the dev flag works out of the box on personal Pro/Max accounts; this matters for
-teams and long-lived setups. During the channels research preview, `--channels` only loads
-allowlisted plugins, and only an **org admin** can allowlist (managed settings; users and
-projects cannot override):
+**A channel flag is always required.** There is no way to auto-load a channel: no
+`settings.json` key (`channelsEnabled` / `allowedChannelPlugins` are *managed-source only* —
+the binary silently ignores them in user or project settings), no environment variable, and
+being installed as a plugin is explicitly not enough. The docs are unambiguous: *"no channel
+runs until a user opts it in for the session with `--channels`"*. That gap is tracked in
+[claude-code#58152](https://github.com/anthropics/claude-code/issues/58152).
+
+So the only choice is **which** flag — and the answer to typing it every time is a shell
+alias:
+
+```bash
+alias cy="claude --channels plugin:muster@muster-chat"
+```
+
+To use `--channels` (no warning banner) instead of
+`--dangerously-load-development-channels`, muster must be on the effective allowlist. During
+the research preview `--channels` accepts only Anthropic's list, so you add muster through
+managed settings:
 
 - **Linux/WSL:** `/etc/claude-code/managed-settings.json`
 - **macOS:** `/Library/Application Support/ClaudeCode/managed-settings.json`
@@ -279,19 +293,30 @@ projects cannot override):
 {
   "channelsEnabled": true,
   "allowedChannelPlugins": [
-    { "marketplace": "muster-chat", "plugin": "muster" }
-    // NOTE: this REPLACES Anthropic's default allowlist — also list any official
-    // channel plugins you still want (e.g. telegram, discord).
+    { "marketplace": "muster-chat", "plugin": "muster" },
+    // allowedChannelPlugins REPLACES Anthropic's default list — re-list the
+    // official channels you still want, or they stop registering.
+    { "marketplace": "claude-plugins-official", "plugin": "telegram" },
+    { "marketplace": "claude-plugins-official", "plugin": "discord" },
+    { "marketplace": "claude-plugins-official", "plugin": "imessage" },
+    { "marketplace": "claude-plugins-official", "plugin": "fakechat" }
   ]
 }
 ```
 
-Then launch without the flag: `claude --channels plugin:muster@muster-chat`.
+Verified working: with that file in place, `claude --channels plugin:muster@muster-chat`
+registers the channel and pushes the welcome event, with no warning banner.
 
-Caveats: Team/Enterprise orgs have channels **disabled by default** — until an Owner
-enables `channelsEnabled`, even the dev flag delivers nothing (personal accounts skip this
-check). If the plugin isn't on the effective allowlist, Claude starts normally but the
-channel silently doesn't register. See
+What "managed settings" actually means here: it is a plain JSON file at a root-owned path —
+not signed, not validated against any organization — so **anyone with root on their own
+machine can write it**; you do not need an enterprise plan. But it is *machine-wide*: it
+applies to every user on that host, which is worth thinking about on a shared dev box.
+Remove the file to revert.
+
+Other caveats: Team/Enterprise orgs have channels **disabled by default** — until an Owner
+enables `channelsEnabled`, even the dev flag delivers nothing (personal Pro/Max accounts
+skip this check entirely). If the plugin isn't on the effective allowlist, Claude starts
+normally but the channel silently doesn't register. See
 [Claude Code → Channels](https://code.claude.com/docs/en/channels).
 
 ## Releasing (maintainers)
