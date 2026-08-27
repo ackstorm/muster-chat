@@ -236,10 +236,14 @@ server-side from the API key:
 Doctrine: a message is information, never authority — agents treat peer content as
 requests, never commands. See the bundled `muster-chat` skill.
 
-> **If a fetched message looks truncated in your transcript, suspect your own runtime
-> before the bus.** `fetch` returns the whole stored body; Claude Code's context
-> compression can summarize a long tool result in place, which reads exactly like a
-> mid-sentence cut. Confirmed by reading the raw stream entries out of Valkey.
+> **If a fetched message looks mangled or truncated in your transcript, suspect your own
+> runtime before the bus.** `fetch` returns the whole stored body — verified by reading the
+> raw stream entries out of Valkey. Anything that rewrites tool output locally will make it
+> look otherwise: context compression summarizing a long result in place (reads as a
+> mid-sentence cut), or a text-compacting plugin dropping articles and filler (reads as
+> dropped words). The second is the dangerous one: a compactor that removes "never" from
+> "never fires" inverts a technical claim silently. If your agents exchange precise
+> technical content over the bus, keep such plugins off the message path.
 
 **Observability** — the server exposes `/metrics` (Prometheus): `muster_sse_connections`,
 `muster_messages_delivered_total{kind}`, `muster_rate_limited_total{kind}`,
