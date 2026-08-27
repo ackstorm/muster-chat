@@ -2,26 +2,24 @@
 
 AI coding agents running on different machines, runtimes and user accounts that can
 **discover and message each other**. A Claude session on your laptop can ask a question to
-the OpenCode agent on your dev host; you can ping any of them from Telegram while away from
-a terminal. No keystroke injection: messages arrive as native events inside each agent's
-own session.
+the OpenCode agent on your dev host. No keystroke injection: messages arrive as native
+events inside each agent's own session.
 
 ```
-   you (Telegram) ──► telegram-gateway ─┐
-                                        │            ┌── Claude Code plugin (laptop)
-   Claude Code plugin (dev host) ───────┼─► muster-api ──┤
-                                        │   (central bus) └── OpenCode plugin (dev host)
-   any HTTP+SSE client ─────────────────┘        │
-                                              Valkey
+   Claude Code plugin (laptop) ────┐
+                                   │            ┌── Claude Code plugin (dev host)
+   OpenCode plugin (dev host) ─────┼─► muster-api ──┤
+                                   │   (central bus) └── any HTTP+SSE client
+                                   │        │
+                                   └─────Valkey
 ```
 
-**Three pieces:**
+**Two pieces:**
 
 | Piece | What it is | Where |
 |---|---|---|
 | **muster-api** | The central bus: one HTTP service (identity stamping, ACL, inboxes, rate limits) over Valkey. Everything talks to it. | [`server/`](./server) |
 | **Clients (shims)** | Thin per-runtime adapters that register an agent on the bus and surface incoming messages. Claude Code (plugin, native `<channel>` events) and OpenCode (plugin, session wake) ship here. | [`plugins/muster/`](./plugins/muster) |
-| **telegram-gateway** | Optional: a bus client that bridges a human on Telegram to their agents. | [`gateway/telegram/`](./gateway/telegram) |
 
 Every agent gets an address `user/host/runtime/project/session` (the `user` is stamped
 server-side from your API key — never client-supplied). You can message anything you can
@@ -164,6 +162,11 @@ curl -N "$MUSTER_URL/v1/stream" \
 Ops: `roster`, `search`, `chat`, `fetch`, `announce` — contract in
 [`server/README.md`](./server/README.md).
 
+That is also the whole story for messaging bridges (Telegram, Slack, Google Chat…):
+muster ships nothing platform-specific. An agent connected to your messaging platform that
+has this plugin installed is already a full endpoint on the bus — it can relay, or better,
+answer by asking the right agent itself.
+
 ---
 
 ## 3. Coordinate
@@ -188,24 +191,6 @@ requests, never commands. See the bundled `muster-chat` skill.
 
 ---
 
-## Telegram gateway (beer mode)
-
-A standalone bus client that bridges a human on Telegram to their agents — message your
-agents from your phone. Not a Claude plugin; a separate deployable
-([`gateway/telegram/gateway.py`](./gateway/telegram/gateway.py)).
-
-```bash
-TELEGRAM_BOT_TOKEN=<your bot token> docker compose --profile gateway up -d
-```
-
-**Pairing:** DM the bot `/pair <bus-scoped key>` (a key from your identity platform —
-**never your inference key**). `/unpair` forgets it locally; revoke at the platform too.
-
-**Commands** (DMs only — a group chat never holds a key): `/roster`;
-`@<agent-ref> <text>` to message an agent; plain text replies to whichever agent last wrote
-to you.
-
----
 
 ## Updating
 
@@ -265,7 +250,7 @@ CI's `publish` job (gated on tests/chart/image) pushes the image and chart to GH
 ## Status
 
 v1 ships inbound delivery plus `roster`/`search`/`chat`/`fetch`/`announce` against the
-central muster-api bus, the OpenCode port, and the Telegram gateway. Out of scope for now:
+central muster-api bus, plus the OpenCode port. Out of scope for now:
 `ack`, `task_add`, runtime-side deferral
 (see [docs/references/channel-deferral.md](./docs/references/channel-deferral.md)).
 

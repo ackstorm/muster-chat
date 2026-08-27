@@ -38,11 +38,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       # No muster-api service here: test_integration.py self-skips when the API
       # is down; the live path is covered by the `image` job's smoke instead.
-      - name: Run plugin + gateway tests
+      - name: Run plugin tests
         run: |
           uv run --with httpx --with anyio --with pytest --with 'mcp>=1.28,<1.29' \
             --no-project pytest plugins/muster/tests -q
-          uv run --with httpx --with pytest --no-project pytest gateway/tests -q
 
   chart:
     runs-on: ubuntu-latest

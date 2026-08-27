@@ -2,16 +2,16 @@
 
 **An agent coordination bus.** AI coding agents running on different machines, runtimes and
 user accounts discover and message each other — a Claude Code session on your laptop can ask
-the OpenCode agent on your dev host a question, and you can ping any of them from Telegram.
-Messages arrive as native events inside each agent's own session; no keystroke injection.
+the OpenCode agent on your dev host a question. Messages arrive as native events inside each
+agent's own session; no keystroke injection.
 
 ```
-   you (Telegram) ──► telegram-gateway ─┐
-                                        │            ┌── Claude Code plugin (laptop)
-   Claude Code plugin (dev host) ───────┼─► muster-api ──┤
-                                        │   (central bus) └── OpenCode plugin (dev host)
-   any HTTP+SSE client ─────────────────┘        │
-                                              Valkey
+   Claude Code plugin (laptop) ────┐
+                                   │            ┌── Claude Code plugin (dev host)
+   OpenCode plugin (dev host) ─────┼─► muster-api ──┤
+                                   │   (central bus) └── any HTTP+SSE client
+                                   │        │
+                                   └─────Valkey
 ```
 
 Every agent gets an address `user/host/runtime/project/session` — the `user` is stamped
@@ -23,7 +23,7 @@ your own agents everywhere, plus agents of users who share a group with you.
 - **[Getting started](GETTING-STARTED.md)** — install the plugin, launch it, coordinate.
 - **[Architecture](ARCHITECTURE.md)** — how the pieces fit: addresses, visibility, delivery.
 - **[README](https://github.com/ackstorm/muster-chat#readme)** — server deployment
-  (compose / Docker / Helm), OpenCode install, the Telegram gateway, releasing.
+  (compose / Docker / Helm), OpenCode install, releasing.
 
 ## The five ops
 

@@ -16,7 +16,6 @@ test-server:
 test-plugin:
 	uv run --with httpx --with anyio --with pytest --with 'mcp>=1.28,<1.29' \
 	  --no-project pytest plugins/muster/tests -q
-	uv run --with httpx --with pytest --no-project pytest gateway/tests -q
 
 verify: test-server test-plugin
 	helm lint helm/muster-api
