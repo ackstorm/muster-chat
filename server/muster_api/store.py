@@ -71,3 +71,56 @@ async def list_agents(r) -> list[dict]:
                     "meta": json.loads(h.get("meta", "{}")),
                     "status": "online" if online else "offline"})
     return out
+
+
+def envelope(frm: str, body: str, subject: str | None, important: bool, subject_max: int = 56) -> str:
+    """v0 envelope semantics: a summary line, never a mid-sentence truncation."""
+    subj = (subject or body).strip()
+    shown = (subj.splitlines()[0] if subj else "")[:subject_max]
+    line = f"✉ {frm}: {shown}" + ("" if shown == body.strip() else " · fetch for full")
+    return ("❗ " + line) if important else line
+
+
+async def append_message(r, to: str, fields: dict, maxlen: int, message_ttl: int) -> str:
+    now = int(time.time())
+    fields = {**fields, "ts": str(now), "expires_at": str(now + message_ttl)}
+    return await r.xadd(inbox_key(to), fields, maxlen=maxlen, approximate=True)
+
+
+async def publish_deliver(r, to: str, event: dict) -> None:
+    await r.publish(notify_channel(to), json.dumps(event))
+
+
+async def _entries_past_cursor(r, a: str, limit: int):
+    cur = await r.get(cursor_key(a))
+    start = ("(" + cur) if cur else "-"
+    return await r.xrange(inbox_key(a), min=start, max="+", count=limit)
+
+
+async def fetch_unread(r, a: str, limit: int) -> list[dict]:
+    """Fetch IS the ack (spec §11): advance the single cursor to the last returned
+    entry. deliver events never touch the cursor."""
+    entries = await _entries_past_cursor(r, a, limit)
+    if not entries:
+        return []
+    await r.set(cursor_key(a), entries[-1][0])
+    now = int(time.time())
+    return [{"msg_id": mid, **f} for mid, f in entries
+            if int(f.get("expires_at", "0") or 0) > now]
+
+
+async def unread_count(r, a: str) -> tuple[int, str]:
+    entries = await _entries_past_cursor(r, a, limit=1000)
+    now = int(time.time())
+    live = [(mid, f) for mid, f in entries if int(f.get("expires_at", "0") or 0) > now]
+    return len(live), (live[0][1].get("ts", "") if live else "")
+
+
+async def rate_check(r, kind: str, a: str, limit: int, window: int) -> tuple[bool, int]:
+    k = rate_key(kind, a)
+    n = await r.incr(k)
+    if n == 1:
+        await r.expire(k, window)
+    if n > limit:
+        return False, max(await r.ttl(k), 1)
+    return True, 0
