@@ -57,6 +57,12 @@ jobs:
           echo "$out" | grep -q 'image: "ghcr.io/ackstorm/muster-chat:' || { echo "image not wired to GHCR/appVersion"; exit 1; }
           echo "$out" | grep -q 'runAsNonRoot: true' || { echo "missing runAsNonRoot"; exit 1; }
           echo "$out" | grep -q 'runAsUser: 10001' || { echo "missing runAsUser 10001"; exit 1; }
+          # inline valkey (default) MUST carry AOF everysec — spec §16
+          echo "$out" | grep -q 'appendfsync' || { echo "inline valkey missing AOF args"; exit 1; }
+          echo "$out" | grep -q 'kind: Ingress' && { echo "ingress must be off by default"; exit 1; }
+          # external mode refuses to render without a url
+          helm template muster helm/muster-api --set valkey.mode=external >/dev/null 2>&1 \
+            && { echo "external mode without valkey.url must fail"; exit 1; } || true
 
   image:
     runs-on: ubuntu-latest

@@ -19,7 +19,11 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           ports: [{containerPort: 8765}]
           env:
-            - {name: MUSTER_VALKEY_URL, value: {{ .Values.valkeyUrl | quote }}}
+            {{- if eq .Values.valkey.mode "inline" }}
+            - {name: MUSTER_VALKEY_URL, value: {{ printf "redis://%s-valkey:6379/0" .Release.Name | quote }}}
+            {{- else }}
+            - {name: MUSTER_VALKEY_URL, value: {{ required "valkey.url is required when valkey.mode=external" .Values.valkey.url | quote }}}
+            {{- end }}
             - {name: MUSTER_RESOLVER_URL, value: {{ .Values.auth.resolverUrl | quote }}}
             - {name: MUSTER_RESOLVER_HEADER, value: {{ .Values.auth.resolverHeader | quote }}}
             - {name: MUSTER_USER_FIELD, value: {{ .Values.auth.userField | quote }}}

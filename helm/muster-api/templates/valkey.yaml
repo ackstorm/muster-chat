@@ -1,0 +1,53 @@
+{{- if eq .Values.valkey.mode "inline" }}
+# Chart-managed single-node Valkey. AOF everysec is NOT optional (spec §16):
+# without it a Valkey restart deletes every inbox.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-valkey
+spec:
+  selector: {app: {{ .Release.Name }}-valkey}
+  ports: [{port: 6379, targetPort: 6379}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-valkey
+spec:
+  serviceName: {{ .Release.Name }}-valkey
+  replicas: 1
+  selector:
+    matchLabels: {app: {{ .Release.Name }}-valkey}
+  template:
+    metadata:
+      labels: {app: {{ .Release.Name }}-valkey}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999        # the valkey user in the official image
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: valkey
+          image: {{ .Values.valkey.inline.image }}
+          args: ["--appendonly", "yes", "--appendfsync", "everysec"]
+          ports: [{containerPort: 6379}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          readinessProbe:
+            exec: {command: ["valkey-cli", "ping"]}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.valkey.inline.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.valkey.inline.storage }}
+{{- end }}

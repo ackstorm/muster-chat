@@ -2,17 +2,34 @@ image:
   repository: ghcr.io/ackstorm/muster-chat
   tag: ""   # defaults to .Chart.AppVersion
 replicas: 2
-# target Valkey MUST run --appendonly yes --appendfsync everysec (spec §16) —
-# without AOF, durable unicast (inbox/cursor survival across restarts) is void.
-valkeyUrl: redis://muster-valkey:6379/1
+
+valkey:
+  # inline: the chart deploys a single-node Valkey (StatefulSet + PVC) with AOF
+  #         enabled — works out of the box, fine for small deployments.
+  # external: bring your own Valkey and set valkey.url. It MUST run
+  #         --appendonly yes --appendfsync everysec (spec §16) — without AOF,
+  #         a restart deletes every inbox and durable unicast is void.
+  mode: inline
+  url: ""   # required when mode=external, e.g. redis://muster-valkey:6379/1
+  inline:
+    image: valkey/valkey:8-alpine
+    storage: 1Gi
+    storageClassName: ""   # empty = cluster default
+
 auth:
   resolverUrl: http://litellm.litellm.svc:4000/v2/user/info
   resolverHeader: x-litellm-api-key
   userField: user_id
   groupsField: teams
+
 ingress:
-  enabled: true
+  enabled: false
   host: muster.example.com
   className: nginx
+  # TLS is optional: leave secretName empty when termination already happens
+  # upstream (wildcard cert at the LB, external ingress, service mesh). Setting
+  # it renders the tls block and forces ssl-redirect.
   tls:
-    secretName: muster-api-tls
+    secretName: ""
+  # extra annotations merged into the Ingress (the SSE ones are always set)
+  annotations: {}

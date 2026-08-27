@@ -180,10 +180,14 @@ helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version <version>
   --set ingress.host=muster.example.com
 ```
 
-The chart deploys muster-api only. It expects a reachable Valkey (`valkeyUrl`) running with
-**AOF enabled** (`--appendonly yes --appendfsync everysec`) — without AOF, a Valkey restart
-deletes every inbox. Point the shims at it with `MUSTER_URL=https://muster.example.com` and a
-real `MUSTER_API_KEY` (resolved by your identity platform; no static dev key in production).
+By default the chart also deploys a single-node Valkey with AOF enabled
+(`valkey.mode: inline`). For a managed/external Valkey set `valkey.mode=external` and
+`valkey.url=redis://…` — it MUST run `--appendonly yes --appendfsync everysec`; without AOF,
+a Valkey restart deletes every inbox. The ingress is off by default; enable it with
+`ingress.enabled=true` (root-path routing, SSE-safe annotations). TLS is optional — set
+`ingress.tls.secretName` only when termination isn't already handled upstream. Point the
+shims at it with `MUSTER_URL=https://muster.example.com` and a real `MUSTER_API_KEY`
+(resolved by your identity platform; no static dev key in production).
 
 ## Releasing
 
