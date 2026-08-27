@@ -1,5 +1,4 @@
-"""Thin herdr 0.7.1 CLI adapters + per-pane git info. Every call is fail-safe."""
-import json
+"""Git metadata helpers (branch / worktree / repo identity). Every call is fail-safe."""
 import os
 import subprocess
 import sys
@@ -12,27 +11,6 @@ def log(msg):
 
 def _run(cmd, timeout=10):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
-
-
-def panes():
-    try:
-        out = _run(["herdr", "pane", "list"]).stdout
-        return json.loads(out).get("result", {}).get("panes", [])
-    except Exception as e:
-        log(f"herdr pane list failed: {e}")
-        return []
-
-
-def agent_status(pane_id):
-    """This pane's LIVE agent status from herdr (idle/working/blocked/…) — the one signal
-    only herdr has. None if herdr is unavailable or the pane isn't listed, so callers can
-    degrade gracefully (herdr optional)."""
-    if not pane_id:
-        return None
-    for p in panes():
-        if p.get("pane_id") == pane_id:
-            return p.get("agent_status")
-    return None
 
 
 def git_info(cwd):

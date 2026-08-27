@@ -1,7 +1,7 @@
 {
   "name": "muster",
-  "description": "Agent Coordination Bus: AI agents sharing a coordination group discover each other by name and message each other over native <channel> events. herdr optional. Tools: roster, chat, fetch.",
-  "version": "0.1.2",
+  "description": "Agent Coordination Bus: agents across hosts, runtimes and users discover and message each other via a central muster-api, delivered as native <channel> events. Tools: roster, search, chat, fetch, announce.",
+  "version": "1.0.0",
   "author": { "name": "Ackstorm" },
   "homepage": "https://github.com/ackstorm/muster-chat"
 }

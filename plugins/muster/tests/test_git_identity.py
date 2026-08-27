@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import tempfile
 
-from plugins.muster.mcp import herdr
+from plugins.muster.mcp import gitmeta
 
 
 def _git(*args, cwd):
@@ -23,9 +23,9 @@ def test_git_identity_main_and_linked_worktree():
         linked = f"{tmp}/wt-feature"
         _git("worktree", "add", "-q", "-b", "feature", linked, cwd=main)
 
-        assert herdr.git_identity(main) == ("main", None)
+        assert gitmeta.git_identity(main) == ("main", None)
 
-        repo, worktree = herdr.git_identity(linked)
+        repo, worktree = gitmeta.git_identity(linked)
         assert repo == "main"
         assert worktree is not None
         assert worktree != "feature"  # branch is NOT part of identity
