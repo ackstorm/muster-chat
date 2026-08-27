@@ -8,6 +8,10 @@ DELIVERED = Counter("muster_messages_delivered_total", "Deliver events published
 RATE_LIMITED = Counter("muster_rate_limited_total", "Requests refused with 429", ["kind"])
 RESOLVER_LATENCY = Histogram("muster_resolver_latency_seconds", "Identity resolver call latency")
 AUTH_CACHE = Counter("muster_auth_cache_total", "Auth cache lookups", ["result"])  # hit|miss
+# Settles the stale-on-transport-error question with data instead of intuition
+# (spec §5.3): does resolver unavailability actually happen, and for how long?
+RESOLVER_ERRORS = Counter("muster_resolver_errors_total", "Failed resolver calls",
+                          ["reason"])  # timeout|connect|transport|http_5xx|http_4xx
 
 
 def render() -> tuple[bytes, str]:

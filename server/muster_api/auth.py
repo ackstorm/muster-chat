@@ -51,12 +51,17 @@ class Authenticator:
             with metrics.RESOLVER_LATENCY.time():
                 resp = await self.http.get(self.cfg.resolver_url,
                                            headers={self.cfg.resolver_header: key})
-        except httpx.HTTPError:
+        except httpx.HTTPError as e:
+            reason = ("timeout" if isinstance(e, httpx.TimeoutException)
+                      else "connect" if isinstance(e, httpx.ConnectError) else "transport")
+            metrics.RESOLVER_ERRORS.labels(reason=reason).inc()
             raise AuthError(503, "resolver_unavailable", "identity resolver unreachable")  # fail closed
         if resp.status_code in (400, 401, 403):
+            metrics.RESOLVER_ERRORS.labels(reason="http_4xx").inc()
             self._cache.pop(kh, None)  # "the resolver said no" is never served from cache
             raise AuthError(401, "unauthorized", "key refused by identity resolver")
         if resp.status_code >= 500:
+            metrics.RESOLVER_ERRORS.labels(reason="http_5xx").inc()
             raise AuthError(503, "resolver_unavailable", f"resolver answered {resp.status_code}")
         data = resp.json()
         try:

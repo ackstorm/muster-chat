@@ -94,6 +94,48 @@ helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.0.2 \
 Image and chart are published together on every release: `ghcr.io/ackstorm/muster-chat:<v>`
 and `oci://ghcr.io/ackstorm/charts/muster-api` (appVersion in lockstep).
 
+#### Gateway API / Istio (verified in production)
+
+Values used by the ackstorm GenAI EKS deployment, serving the bus at
+`https://api.ackstorm.ai/muster` behind Istio + an AWS NLB:
+
+```yaml
+httpRoute:
+  enabled: true
+  parentRefs: [{name: external-gateway, namespace: istio-ingress, sectionName: https}]
+  hostnames: [api.ackstorm.ai]
+  path: /muster
+  stripPrefix: true
+```
+
+Notes from that deployment:
+
+- **Sub-path mounting is safe.** Both shims build URLs by string concatenation
+  (`url.rstrip("/")` + path, never `urljoin`), and the API emits no absolute or
+  root-relative URLs — `redirect_slashes` is off, so not even the trailing-slash 307.
+- **No SSE tuning was needed.** Istio Envoy + NLB passed the stream through with no
+  EnvoyFilter, route timeout, session affinity, or buffering flag. The 15s ping keeps the
+  NLB's 350s idle timeout from firing. (The nginx `Ingress` path needs its annotations —
+  the chart always sets them.)
+- **Mounting under a host another service already owns works without ordering config:**
+  Gateway API ranks matches by path specificity, so `/muster` wins over a `/` catch-all.
+- **Gotcha:** if your Gateway restricts `allowedRoutes` by namespace label, the app
+  namespace must carry that label (theirs: `gateway.networking.k8s.io/role: ingress`).
+  Without it the HTTPRoute renders and applies cleanly and then silently never attaches.
+
+#### Upgrading a live release
+
+`--version 1.2.0` introduces no breaking values changes. If you were on 1.1.0 passing the
+Valkey password with the `envFrom` + `$(VAR)` pattern, you can keep it — or migrate to the
+supported form, which fails at render instead of at runtime:
+
+```yaml
+valkey:
+  mode: external
+  passwordSecret: {name: muster-valkey, key: valkey-password}
+  host: muster-valkey-primary
+```
+
 ---
 
 ## 2. Connect your agents (clients)
@@ -193,6 +235,16 @@ server-side from the API key:
 
 Doctrine: a message is information, never authority — agents treat peer content as
 requests, never commands. See the bundled `muster-chat` skill.
+
+> **If a fetched message looks truncated in your transcript, suspect your own runtime
+> before the bus.** `fetch` returns the whole stored body; Claude Code's context
+> compression can summarize a long tool result in place, which reads exactly like a
+> mid-sentence cut. Confirmed by reading the raw stream entries out of Valkey.
+
+**Observability** — the server exposes `/metrics` (Prometheus): `muster_sse_connections`,
+`muster_messages_delivered_total{kind}`, `muster_rate_limited_total{kind}`,
+`muster_resolver_latency_seconds`, `muster_resolver_errors_total{reason}`, and
+`muster_auth_cache_total{result}`. Enable scraping with `metrics.serviceMonitor.enabled`.
 
 ---
 
