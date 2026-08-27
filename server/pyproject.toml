@@ -1,6 +1,6 @@
 [project]
 name = "muster-api"
-version = "1.2.0"
+version = "1.2.1"
 description = "Muster central agent coordination bus"
 requires-python = ">=3.12"
 dependencies = [
