@@ -4,6 +4,7 @@ Valkey key names)."""
 import json
 import time
 
+from . import metrics
 from .identity import Address
 
 AGENTS = "muster2:agents"  # SET of full address strings — the directory
@@ -89,6 +90,7 @@ async def append_message(r, to: str, fields: dict, maxlen: int, message_ttl: int
 
 async def publish_deliver(r, to: str, event: dict) -> None:
     await r.publish(notify_channel(to), json.dumps(event))
+    metrics.DELIVERED.labels(kind=event.get("kind", "")).inc()
 
 
 async def _entries_past_cursor(r, a: str, limit: int):

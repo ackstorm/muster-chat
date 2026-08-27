@@ -9,7 +9,7 @@ import anyio
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
-from . import store
+from . import metrics, store
 from .auth import AuthError
 
 
@@ -29,6 +29,7 @@ async def stream_endpoint(request: Request, ident, addr) -> StreamingResponse:
 
     async def gen():
         nonlocal ident  # rebound on ping re-auth below when groups change
+        metrics.SSE_CONNECTIONS.inc()
         await store.register_agent(r, addr, ident.groups, meta, cfg.agent_retention)
         await store.touch_presence(r, a, connection_id, cfg.presence_ttl)
         pubsub = r.pubsub()
@@ -64,6 +65,7 @@ async def stream_endpoint(request: Request, ident, addr) -> StreamingResponse:
             # scope on client disconnect and would themselves be cancelled before completing
             # — shield so presence cleanup always lands. Deadline bounds a blackholed Valkey
             # so shutdown can't stall forever.
+            metrics.SSE_CONNECTIONS.dec()
             with anyio.move_on_after(5, shield=True):
                 await pubsub.aclose()
                 await store.clear_presence(r, a, connection_id)  # no-op if a successor took over

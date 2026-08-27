@@ -34,8 +34,22 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           ports: [{containerPort: 8765}]
           env:
+            # extraEnv renders FIRST: kubelet $(VAR) expansion only sees vars
+            # declared earlier, so built-ins below may reference user vars.
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             {{- if eq .Values.valkey.mode "inline" }}
             - {name: MUSTER_VALKEY_URL, value: {{ printf "redis://%s-valkey:6379/0" .Release.Name | quote }}}
+            {{- else if .Values.valkey.passwordSecret.name }}
+            # password env MUST precede the URL that $(references) it
+            - name: MUSTER_VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.valkey.passwordSecret.name }}
+                  key: {{ required "valkey.passwordSecret.key is required with valkey.passwordSecret.name" .Values.valkey.passwordSecret.key }}
+            - name: MUSTER_VALKEY_URL
+              value: {{ printf "redis://:$(MUSTER_VALKEY_PASSWORD)@%s:%d/%d" (required "valkey.host is required with valkey.passwordSecret" .Values.valkey.host) (int .Values.valkey.port) (int .Values.valkey.db) | quote }}
             {{- else if .Values.valkey.urlSecret.name }}
             - name: MUSTER_VALKEY_URL
               valueFrom:
@@ -43,15 +57,12 @@ spec:
                   name: {{ .Values.valkey.urlSecret.name }}
                   key: {{ required "valkey.urlSecret.key is required with valkey.urlSecret.name" .Values.valkey.urlSecret.key }}
             {{- else }}
-            - {name: MUSTER_VALKEY_URL, value: {{ required "set valkey.url or valkey.urlSecret when valkey.mode=external" .Values.valkey.url | quote }}}
+            - {name: MUSTER_VALKEY_URL, value: {{ required "set valkey.url, valkey.urlSecret or valkey.passwordSecret when valkey.mode=external" .Values.valkey.url | quote }}}
             {{- end }}
             - {name: MUSTER_RESOLVER_URL, value: {{ .Values.auth.resolverUrl | quote }}}
             - {name: MUSTER_RESOLVER_HEADER, value: {{ .Values.auth.resolverHeader | quote }}}
             - {name: MUSTER_USER_FIELD, value: {{ .Values.auth.userField | quote }}}
             - {name: MUSTER_GROUPS_FIELD, value: {{ .Values.auth.groupsField | quote }}}
-            {{- with .Values.extraEnv }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
@@ -75,7 +86,19 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- if .Values.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else }}
+      # default: soft spread across nodes so a single drain can't take down the
+      # whole bus while the PDB reports itself satisfied
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "muster-api.selectorLabels" . | nindent 20 }}
       {{- end }}

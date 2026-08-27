@@ -1,6 +1,6 @@
 """RPC handlers. Every rule the server enforces lives here or in identity.visible —
 reference resolution, ACL, size cap, self-send, rate limits, server-stamped from."""
-from . import identity, store
+from . import identity, metrics, store
 from .auth import Identity
 from .identity import Address
 
@@ -32,6 +32,7 @@ def _resolve_reference(ref: str, agents: list[dict]) -> dict:
 async def _check_rate(r, kind: str, sender: str, limit: int, window: int):
     ok, retry = await store.rate_check(r, kind, sender, limit, window)
     if not ok:
+        metrics.RATE_LIMITED.labels(kind=kind).inc()
         raise OpError(429, {"code": "message_rate_exceeded", "retry_after": retry,
                             "limit": limit, "window": window,
                             "message": "Unusually high agent messaging rate; possible message "

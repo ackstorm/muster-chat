@@ -20,16 +20,28 @@ probes:
 valkey:
   # inline: the chart deploys a single-node Valkey (StatefulSet + PVC) with AOF
   #         enabled — works out of the box, fine for small deployments.
-  # external: bring your own Valkey. Set EITHER valkey.url (plaintext) OR
-  #         valkey.urlSecret (the full redis:// URL, password included, read from a
-  #         Kubernetes Secret — e.g. redis://:pass@muster-valkey-master:6379/0).
-  #         It MUST run --appendonly yes --appendfsync everysec (spec §16) — without
-  #         AOF, a restart deletes every inbox and durable unicast is void.
+  # external: bring your own Valkey. Credential options, most specific wins:
+  #         1) valkey.passwordSecret {name,key} + valkey.host/port/db — the chart
+  #            reads the PASSWORD from a Kubernetes Secret and composes the URL.
+  #            This matches what secret-generator / Bitnami / ElastiCache hand out.
+  #         2) valkey.urlSecret {name,key} — a Secret holding the COMPLETE
+  #            redis:// URL, password included.
+  #         3) valkey.url — plaintext URL (dev only).
+  #         The store MUST run --appendonly yes --appendfsync everysec (spec §16) —
+  #         without AOF, a restart deletes every inbox. NOTE for the Bitnami valkey
+  #         chart: these flags go in `commonConfiguration`, NOT in `args` — args
+  #         feed Bitnami's own start script and are a silent no-op.
   mode: inline
   url: ""
   urlSecret:
-    name: ""   # Secret name holding the full MUSTER_VALKEY_URL
-    key: ""    # key inside that Secret
+    name: ""
+    key: ""
+  passwordSecret:
+    name: ""   # Secret holding just the password
+    key: ""
+  host: ""     # used with passwordSecret, e.g. muster-valkey-primary
+  port: 6379
+  db: 0
   inline:
     image: valkey/valkey:8-alpine@sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84
     storage: 1Gi
@@ -37,6 +49,17 @@ valkey:
     resources:
       requests: {cpu: 50m, memory: 64Mi}
       limits: {memory: 256Mi}
+    # Valkey cannot see the cgroup limit: without an explicit maxmemory a busy
+    # store grows until the kernel OOMKills it mid-AOF-write — data loss on a
+    # schedule. ~75% of resources.limits.memory. noeviction is the only correct
+    # policy for a message store: allkeys-lru would silently DELETE inboxes to
+    # make room; refusing the write is the safe direction.
+    maxmemory: 192mb
+    maxmemoryPolicy: noeviction
+    # Inline Valkey is unauthenticated — this NetworkPolicy restricts 6379 to
+    # the api pods so other workloads in the namespace can't read inboxes.
+    # (Need auth on the store itself? Use mode: external with passwordSecret.)
+    networkPolicy: true
 
 auth:
   resolverUrl: http://litellm.litellm.svc:4000/v2/user/info
@@ -48,12 +71,18 @@ auth:
 # (MUSTER_MESSAGE_TTL, MUSTER_INBOX_MAXLEN, MUSTER_CHAT_RATE, MUSTER_ANNOUNCE_RATE,
 # MUSTER_RATE_WINDOW, MUSTER_BODY_MAX, MUSTER_AUTH_CACHE_TTL, MUSTER_AGENT_RETENTION,
 # MUSTER_STATIC_KEYS…). Standard k8s EnvVar entries (value or valueFrom).
+# Rendered BEFORE the chart's built-in vars, so built-ins may reference them with
+# $(VAR). Secrets (MUSTER_STATIC_KEYS!) belong in a Secret via valueFrom/envFrom —
+# a plaintext Helm value ends up committed to git in any GitOps flow.
 extraEnv: []
 envFrom: []
 
 podAnnotations: {}
 nodeSelector: {}
 tolerations: []
+# Empty = a default SOFT podAntiAffinity on kubernetes.io/hostname, so two
+# replicas don't share a node and the PDB means what it says. Set your own
+# affinity to override completely.
 affinity: {}
 
 serviceAccount:
@@ -63,6 +92,11 @@ serviceAccount:
 pdb:
   enabled: false
   minAvailable: 1
+
+metrics:
+  serviceMonitor:
+    enabled: false   # needs the Prometheus Operator CRDs (kube-prometheus-stack)
+    interval: 30s
 
 ingress:
   enabled: false

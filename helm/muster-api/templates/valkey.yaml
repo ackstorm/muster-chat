@@ -34,7 +34,9 @@ spec:
       containers:
         - name: valkey
           image: {{ .Values.valkey.inline.image }}
-          args: ["--appendonly", "yes", "--appendfsync", "everysec"]
+          args: ["--appendonly", "yes", "--appendfsync", "everysec",
+                 "--maxmemory", {{ .Values.valkey.inline.maxmemory | quote }},
+                 "--maxmemory-policy", {{ .Values.valkey.inline.maxmemoryPolicy | quote }}]
           ports: [{containerPort: 6379}]
           securityContext:
             allowPrivilegeEscalation: false

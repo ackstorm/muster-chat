@@ -108,3 +108,10 @@ async def test_readyz_reflects_valkey(client):
     async with __import__("httpx").AsyncClient(transport=transport, base_url="http://t") as c:
         assert (await c.get("/readyz")).status_code == 503
         assert (await c.get("/healthz")).status_code == 200
+
+
+async def test_metrics_endpoint(client):
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert "muster_messages_delivered_total" in resp.text
+    assert "muster_sse_connections" in resp.text

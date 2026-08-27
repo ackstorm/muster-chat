@@ -32,7 +32,9 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
         yield
         task.cancel()
 
-    app = FastAPI(title="muster-api", lifespan=lifespan)
+    # redirect_slashes=False: the 307 for /v1/rpc/ carries a root-relative
+    # Location, the one absolute-URL edge that breaks sub-path mounting.
+    app = FastAPI(title="muster-api", lifespan=lifespan, redirect_slashes=False)
     app.state.cfg = cfg
     app.state.redis = redis.from_url(cfg.valkey_url, decode_responses=True)
     app.state.auth = Authenticator(cfg)
@@ -62,6 +64,15 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
         except Exception:
             return JSONResponse({"ok": False, "valkey": "unreachable"}, status_code=503)
         return {"ok": True}
+
+    from fastapi import Response
+
+    from . import metrics as metrics_mod
+
+    @app.get("/metrics")
+    async def metrics_route():
+        body, ctype = metrics_mod.render()
+        return Response(content=body, media_type=ctype)
 
     @app.post("/v1/rpc")
     async def rpc(request: Request):

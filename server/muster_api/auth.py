@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from . import config as config_mod
+from . import config as config_mod, metrics
 
 
 @dataclass(frozen=True)
@@ -42,11 +42,15 @@ class Authenticator:
         kh = hashlib.sha256(key.encode()).hexdigest()  # never hold raw keys in memory maps/logs
         hit = self._cache.get(kh)
         if hit and hit[1] > time.monotonic():
+            metrics.AUTH_CACHE.labels(result="hit").inc()
             return hit[0]
+        metrics.AUTH_CACHE.labels(result="miss").inc()
         if not self.cfg.resolver_url:
             raise AuthError(401, "unauthorized", "no resolver configured and key not in static keys")
         try:
-            resp = await self.http.get(self.cfg.resolver_url, headers={self.cfg.resolver_header: key})
+            with metrics.RESOLVER_LATENCY.time():
+                resp = await self.http.get(self.cfg.resolver_url,
+                                           headers={self.cfg.resolver_header: key})
         except httpx.HTTPError:
             raise AuthError(503, "resolver_unavailable", "identity resolver unreachable")  # fail closed
         if resp.status_code in (400, 401, 403):

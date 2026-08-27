@@ -11,7 +11,7 @@ VERSION ?=
 
 test-server:
 	uv run --with redis --with anyio --with pytest --with pytest-asyncio \
-	  --with fastapi --with httpx --with uvicorn --no-project pytest server/tests -q
+	  --with fastapi --with httpx --with uvicorn --with prometheus-client --no-project pytest server/tests -q
 
 test-plugin:
 	uv run --with httpx --with anyio --with pytest --with 'mcp>=1.28,<1.29' \

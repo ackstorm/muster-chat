@@ -1,0 +1,21 @@
+{{- if and (eq .Values.valkey.mode "inline") .Values.valkey.inline.networkPolicy }}
+# The inline Valkey is unauthenticated and holds every inbox — restrict 6379 to
+# the api pods so no other workload in the namespace can read it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-valkey
+  labels:
+    {{- include "muster-api.valkeyLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app: {{ .Release.Name }}-valkey}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "muster-api.selectorLabels" . | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 6379}
+{{- end }}
