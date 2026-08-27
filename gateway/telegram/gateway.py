@@ -161,8 +161,13 @@ def fmt_bus_error(e):
 class Telegram:
     def __init__(self, token):
         import httpx
+        self.token = token
         self.base = f"https://api.telegram.org/bot{token}"
         self.http = httpx.AsyncClient(timeout=httpx.Timeout(65, connect=10))
+
+    def scrub(self, s):
+        """Never let the raw bot token (embedded in every request URL) reach a log line."""
+        return s.replace(self.token, "bot***")
 
     async def updates(self, offset):
         resp = await self.http.get(f"{self.base}/getUpdates",
@@ -173,8 +178,22 @@ class Telegram:
     async def send(self, chat_id, text):
         # Telegram caps messages at 4096 chars — split long agent replies
         for i in range(0, max(len(text), 1), 4000):
-            await self.http.post(f"{self.base}/sendMessage",
-                                 json={"chat_id": chat_id, "text": text[i:i + 4000]})
+            chunk = text[i:i + 4000]
+            for attempt in range(3):
+                resp = await self.http.post(f"{self.base}/sendMessage",
+                                            json={"chat_id": chat_id, "text": chunk})
+                if resp.status_code == 200:
+                    break
+                if resp.status_code == 429:
+                    retry_after = resp.json().get("parameters", {}).get("retry_after", 1)
+                    log(f"telegram 429 chat={chat_id}; retry_after={retry_after}s (attempt {attempt + 1}/3)")
+                    await asyncio.sleep(retry_after)
+                    continue
+                log(f"telegram sendMessage failed chat={chat_id} status={resp.status_code}: {self.scrub(resp.text)}")
+                raise RuntimeError(f"telegram sendMessage failed: HTTP {resp.status_code}")
+            else:
+                log(f"telegram sendMessage rate-limited chat={chat_id}; giving up after 3 attempts")
+                raise RuntimeError("telegram sendMessage: retries exhausted (429)")
 
 
 # ---------- gateway wiring ----------
@@ -206,18 +225,22 @@ class Gateway:
                 await bus.aclose()
                 raise
             except Exception as e:
-                log(f"stream err chat={chat_id}: {e!r}; retry in {backoff}s")
+                log(f"stream err chat={chat_id}: {self.tg.scrub(repr(e))}; retry in {backoff}s")
             await bus.aclose()
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
 
     async def drain(self, chat_id, bus):
-        msgs = (await bus.rpc("fetch", {"limit": 20}))["messages"]
-        for m in msgs:
-            self.store.set_last(chat_id, m["from"])   # bare text replies go here
-            mark = "❗ " if m.get("important") else ""
-            subj = f" [{m['subject']}]" if m.get("subject") else ""
-            await self.tg.send(chat_id, f"{mark}✉ {m['from']}{subj}:\n{m['body']}")
+        # A coalesced unread nudge can stand for a backlog > one page — loop until empty.
+        while True:
+            msgs = (await bus.rpc("fetch", {"limit": 20}))["messages"]
+            if not msgs:
+                return
+            for m in msgs:
+                self.store.set_last(chat_id, m["from"])   # bare text replies go here
+                mark = "❗ " if m.get("important") else ""
+                subj = f" [{m['subject']}]" if m.get("subject") else ""
+                await self.tg.send(chat_id, f"{mark}✉ {m['from']}{subj}:\n{m['body']}")
 
     def start_stream(self, chat_id, key):
         self.stop_stream(chat_id)
@@ -263,8 +286,9 @@ class Gateway:
             elif cmd == "roster":
                 agents = (await bus.rpc("roster"))["agents"]
                 peers = [a for a in agents if not a["addr"].endswith("/" + AGENT)]
-                await self.tg.send(chat_id, "Your reachable agents:\n" + "\n".join(
-                    f"- {a['addr']} — {a['status']}" for a in peers) if peers else "No agents visible.")
+                text = ("Your reachable agents:\n" + "\n".join(
+                    f"- {a['addr']} — {a['status']}" for a in peers)) if peers else "No agents visible."
+                await self.tg.send(chat_id, text)
             elif cmd == "chat":
                 ref, body = arg
                 res = await bus.rpc("chat", {"to": ref, "body": body})
@@ -302,7 +326,7 @@ class Gateway:
                         continue                     # DMs only — a group chat must never hold a key
                     await self.handle(chat_id, text)
             except Exception as e:
-                log(f"telegram poll err {e!r}; retry in 5s")
+                log(f"telegram poll err {self.tg.scrub(repr(e))}; retry in 5s")
                 await asyncio.sleep(5)
 
 
