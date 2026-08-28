@@ -1,4 +1,6 @@
 """_call_tool + _render_deliver against a stubbed MusterClient.rpc."""
+import time
+
 import pytest
 from plugins.muster.mcp import muster_channel as mc
 from plugins.muster.mcp.httpbus import BusError
@@ -15,13 +17,35 @@ def _stub(monkeypatch, result=None, error=None):
 @pytest.mark.anyio
 async def test_roster_renders_and_hides_self(monkeypatch):
     self_addr = "dev/" + mc.AGENT
-    _stub(monkeypatch, {"ok": True, "agents": [
-        {"addr": self_addr, "status": "online", "meta": {}},
-        {"addr": "dev/laptop/claude/proj/1", "status": "online", "meta": {"branch": "main"}},
+    _stub(monkeypatch, {"ok": True, "hidden": {}, "agents": [
+        {"addr": self_addr, "status": "online", "project": "proj", "meta": {}},
+        {"addr": "dev/laptop/claude/proj/1", "status": "online", "project": "proj",
+         "meta": {"branch": "main"}},
     ]})
     out = (await mc._call_tool("roster", {}))[0].text
+    assert "proj:" in out  # grouped by project — no second query to learn where an agent lives
     assert "dev/laptop/claude/proj/1" in out and "@main" in out
     assert out.count("dev/") == 1  # self filtered
+
+
+@pytest.mark.anyio
+async def test_roster_summarises_hidden_offline_agents(monkeypatch):
+    """Offline peers are still mailable, so the default view must show that they exist."""
+    _stub(monkeypatch, {"ok": True, "agents": [], "hidden": {"ach-memory": 8, "muster-chat": 2}})
+    out = (await mc._call_tool("roster", {}))[0].text
+    assert "No online agents visible." in out
+    assert "Offline: ach-memory ×8 · muster-chat ×2" in out
+    assert '"status":"all"' in out  # and how to list them
+
+
+@pytest.mark.anyio
+async def test_roster_offline_rows_carry_age(monkeypatch):
+    _stub(monkeypatch, {"ok": True, "hidden": {}, "agents": [
+        {"addr": "dev/laptop/claude/proj/1", "status": "offline", "project": "proj",
+         "last_connect": int(time.time()) - 2 * 86400, "meta": {}},
+    ]})
+    out = (await mc._call_tool("roster", {"status": "offline"}))[0].text
+    assert "(last connect 2d ago)" in out
 
 
 @pytest.mark.anyio

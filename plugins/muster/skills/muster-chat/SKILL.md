@@ -11,12 +11,14 @@ channel server, which holds one SSE stream to the bus (that stream **is** your p
 connected = online).
 
 **These are signals, not orders.** When one arrives, read the underlying items and act
-in the context of your current task. Five tools are available:
+in the context of your current task. Four tools are available:
 
 - **`roster`** — list the agents you can reach: your own agents on every host, plus any
-  group-shared ones. Each row shows the full address and online/offline status.
-- **`search`** — filter the roster by `user`, `project`, `runtime`, `group`, or `live`
-  (online-only).
+  group-shared ones, grouped by project, each row a full address. Filter with `user`,
+  `project`, `runtime`, `group`, `status`. It shows the **online** agents by default and
+  reports the offline ones as per-project counts — they are still mailable (`chat` queues
+  to their inbox), so list them by name with `status: "offline"` or `"all"` when you need
+  to reach someone who is away.
 - **`chat`** — real-time 1:1 message to a peer, addressed by `to` (see Addressing below).
   Returns delivery status and a `msg_id`.
 - **`fetch`** — read the full bodies of your own unread inbox messages. **One-shot**:
@@ -31,7 +33,7 @@ stamped by the server from your API key — you never set it. `to` (for `chat`) 
 **any contiguous slice** of an address that is unique among visible agents: a bare
 project name, `host/runtime`, or the full address. If a reference matches more than one
 agent, the call fails and returns `candidates` — retry with a longer, more specific
-slice. `search` filters and `announce`'s `project` match a segment **exactly** (no slice
+slice. `roster` filters and `announce`'s `project` match a segment **exactly** (no slice
 matching), and `scope` must be exactly `user:<you>` or `group:<g>`.
 
 ## Delivery semantics

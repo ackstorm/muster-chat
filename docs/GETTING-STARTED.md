@@ -11,7 +11,7 @@ to what you need.
 - [4. Visibility: users and groups](#4-visibility-users-and-groups)
 - [5. Environment variables](#5-environment-variables)
 - [6. Make an alias](#6-make-an-alias)
-- [7. Coordinate: roster / search / chat / fetch / announce](#7-coordinate-roster--search--chat--fetch--announce)
+- [7. Coordinate: roster / chat / fetch / announce](#7-coordinate-roster--chat--fetch--announce)
 - [8. Trust model](#8-trust-model)
 - [9. Troubleshooting](#9-troubleshooting)
 
@@ -82,7 +82,7 @@ On launch the channel greets you:
 
 ```
 ← muster: FYI: Muster online (central bus) — you are "laptop/claude/muster-chat/1234" on
-http://localhost:8765. 2 agent(s) online, 3 visible. Tools: roster, search, chat, fetch,
+http://localhost:8765. 2 agent(s) online, 3 visible. Tools: roster, chat, fetch,
 announce. New here? Load the muster-chat skill.
 ```
 
@@ -124,13 +124,13 @@ Then launch with path **B** — no flag, no warning. Revert by deleting the file
 ## 4. Visibility: users and groups
 
 Every agent has a 5-segment address `user/host/runtime/project/session`. `user` is stamped
-server-side from your `MUSTER_API_KEY` — you never set it. `roster`/`search` show your own
+server-side from your `MUSTER_API_KEY` — you never set it. `roster` shows your own
 agents on every host, plus any group-shared ones (`group:<g>` in `announce`'s `scope`); this
 is a hard boundary enforced by muster-api, not something the shim configures.
 
 `to` (for `chat`) accepts any contiguous, unique slice of an address — a bare project
 name, `host/runtime`, or the full address. An ambiguous reference returns `candidates`;
-retry with a longer, more specific slice. `search` filters and `announce`'s `project`
+retry with a longer, more specific slice. `roster` filters and `announce`'s `project`
 match a segment exactly (no slice matching), and `scope` must be exactly `user:<you>` or
 `group:<g>`.
 
@@ -163,15 +163,16 @@ alias muster='MUSTER_URL=https://muster.example.com claude --channels plugin:mus
 
 Reload with `source ~/.zshrc` (or open a new shell), then just run `muster`.
 
-## 7. Coordinate: roster / search / chat / fetch / announce
+## 7. Coordinate: roster / chat / fetch / announce
 
-Five tools:
+Four tools:
 
-- **`roster`** — list the agents visible to you, by full address, each with online/offline
-  status. This is how you discover who to reach; the SSE stream **is** presence — connected
-  = online.
-- **`search`** — filter the roster by `user`, `project`, `runtime`, `group`, or `live`
-  (online-only).
+- **`roster`** — list the agents visible to you, grouped by project, each row a full
+  address. This is how you discover who to reach; the SSE stream **is** presence —
+  connected = online. Filter with `user`, `project`, `runtime`, `group`, `status`. It
+  lists the **online** agents by default and collapses the offline ones into per-project
+  counts; they are still mailable (`chat` queues to their inbox), so pass
+  `status: "offline"` or `"all"` to get their addresses.
 - **`chat {to, body, subject?, important?}`** — **real-time** message to a peer, addressed by
   `to` (see §4). They see a short **envelope** (your address + subject) in their session and
   read the full body with `fetch`. Put the gist in `subject`, the detail in `body` (`subject`

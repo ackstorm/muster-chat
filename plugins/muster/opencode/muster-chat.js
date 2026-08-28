@@ -43,6 +43,49 @@ export const MusterChatPlugin = async ({ client, directory, worktree, $ }) => {
     if (p.retry_after != null) m += ` | retry in ${p.retry_after}s`;
     return m;
   };
+  // Coarse age — enough to tell a pane closed minutes ago from a long-dead one.
+  const age = (ts) => {
+    const d = Math.max(0, Math.floor(Date.now() / 1000) - Number(ts));
+    for (const [unit, n] of [["d", 86400], ["h", 3600], ["m", 60]]) {
+      if (d >= n) return `${Math.floor(d / n)}${unit}`;
+    }
+    return `${d}s`;
+  };
+  const fmtAgent = (a, showStatus) => {
+    let line = `- ${a.addr}`;                  // full address: the `to` reference is a slice of it
+    if (showStatus) line += ` — ${a.status}`;
+    if (a.meta?.branch) line += ` @${a.meta.branch}`;
+    if (a.status === "offline" && a.last_connect) line += ` (last connect ${age(a.last_connect)} ago)`;
+    return line;
+  };
+  // Grouped by project, so "which project/host is this" costs no second query. `hidden`
+  // (per-project counts of the agents the status filter dropped) collapses to one line —
+  // offline peers are still mailable, so their existence must stay visible.
+  const fmtRoster = (agents, hidden, status) => {
+    const label = status === "all" ? "visible" : status;
+    const lines = [];
+    if (agents.length) {
+      const byProject = {};
+      for (const a of agents) (byProject[a.project] ||= []).push(a);
+      lines.push(`You are "${agent}". ${agents.length} ${label} agent(s):`);
+      for (const project of Object.keys(byProject).sort()) {
+        lines.push(`${project}:`);
+        for (const a of byProject[project].sort((x, y) => x.addr.localeCompare(y.addr))) {
+          lines.push(fmtAgent(a, status === "all"));
+        }
+      }
+    } else {
+      lines.push(`You are "${agent}". No ${label} agents visible.`);
+    }
+    const entries = Object.entries(hidden);
+    if (entries.length) {
+      entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const counts = entries.map(([p, n]) => `${p} ×${n}`).join(" · ");
+      lines.push(`${status === "online" ? "Offline" : "Online"}: ${counts}`
+        + ` — muster_roster {"status":"all"} or {"project":"…"} to list them`);
+    }
+    return lines.join("\n");
+  };
 
   // ---- delivery ----
   // The active session to deliver into — learned ONLY from turn hooks (chat.message/event).
@@ -182,15 +225,24 @@ export const MusterChatPlugin = async ({ client, directory, worktree, $ }) => {
 
     tool: {
       muster_roster: tool({
-        description: "List agents visible to you on the Muster bus (full address + online/offline).",
-        args: {},
-        async execute() {
+        description: "List agents visible to you on the Muster bus, grouped by project (full "
+          + "address + branch). Shows ONLINE agents by default and summarises the offline ones "
+          + "as per-project counts; filter with project/user/runtime/group, or pass status to "
+          + "list the offline ones — they are still mailable, chat queues to their inbox.",
+        args: {
+          user: tool.schema.string().optional(),
+          project: tool.schema.string().optional(),
+          runtime: tool.schema.string().optional(),
+          group: tool.schema.string().optional(),
+          status: tool.schema.enum(["online", "offline", "all"]).optional().describe("default: online"),
+        },
+        async execute(args) {
           try {
-            const { agents } = await rpc("roster");
+            const filters = Object.fromEntries(Object.entries(args || {}).filter(([, v]) => v));
+            const status = filters.status || "online";
+            const { agents, hidden } = await rpc("roster", filters);
             const peers = agents.filter((a) => a.addr.split("/").slice(1).join("/") !== agent);
-            if (!peers.length) return `You are "${agent}". No other agents visible.`;
-            return `You are "${agent}". Visible:\n`
-              + peers.map((a) => `- ${a.addr} — ${a.status}${a.meta?.branch ? " @" + a.meta.branch : ""}`).join("\n");
+            return fmtRoster(peers, hidden || {}, status);
           } catch (e) { return `Muster: ${fmtErr(e)}`; }
         },
       }),

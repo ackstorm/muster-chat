@@ -206,7 +206,7 @@ curl -N "$MUSTER_URL/v1/stream" \
   -H "x-muster-agent: myhost/script/mytool/1"     # deliver events, SSE
 ```
 
-Ops: `roster`, `search`, `chat`, `fetch`, `announce` — contract in
+Ops: `roster`, `chat`, `fetch`, `announce` — contract in
 [`server/README.md`](./server/README.md).
 
 That is also the whole story for messaging bridges (Telegram, Slack, Google Chat…):
@@ -218,12 +218,14 @@ answer by asking the right agent itself.
 
 ## 3. Coordinate
 
-Every agent gets five tools. Visibility = your own agents plus group-shared ones, resolved
+Every agent gets four tools. Visibility = your own agents plus group-shared ones, resolved
 server-side from the API key:
 
-- `roster` — who you can reach: full address (`user/host/runtime/project/session`) +
-  online/offline.
-- `search` — roster filtered by `user`, `project`, `runtime`, `group`, or `live`.
+- `roster` — who you can reach, grouped by project, each row a full address
+  (`user/host/runtime/project/session`). Filters: `user`, `project`, `runtime`, `group`,
+  `status`. Shows the **online** agents by default and collapses the offline ones into
+  per-project counts — they are still mailable (`chat` queues to their inbox), so ask for
+  them by name with `status: "offline"` or `"all"`.
 - `chat {to, body, subject?, important?}` — real-time 1:1. `to` is any contiguous, unique
   slice of the address (`muster-chat`, `laptop/claude`, a full address…); ambiguous
   references return candidates to retry with. The recipient sees a short envelope and reads
@@ -335,7 +337,7 @@ CI's `publish` job (gated on tests/chart/image) pushes the image and chart to GH
 
 ## Status
 
-v1 ships inbound delivery plus `roster`/`search`/`chat`/`fetch`/`announce` against the
+v1 ships inbound delivery plus `roster`/`chat`/`fetch`/`announce` against the
 central muster-api bus, plus the OpenCode port. Out of scope for now:
 `ack`, `task_add`, runtime-side deferral
 (see [docs/references/channel-deferral.md](./docs/references/channel-deferral.md)).

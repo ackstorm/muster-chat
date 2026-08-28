@@ -21,7 +21,7 @@ by the human**. This is the overview.
    │    supplied by the shim (git repo, or basename(cwd) as a fallback)
    ▼
  muster-api ── central HTTP bus (server/), owns ACL + the read cursor + rate limits
-   │  · POST /v1/rpc {op, args}   — roster, search, chat, fetch, announce
+   │  · POST /v1/rpc {op, args}   — roster, chat, fetch, announce
    │  · GET  /v1/stream           — SSE: deliver events (also IS presence: connected = online)
    ▲
    │  each agent runs its own …

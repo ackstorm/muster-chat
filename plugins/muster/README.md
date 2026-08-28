@@ -4,7 +4,7 @@ Pushes an agent's **muster-api inbox** into its own Claude Code session as nativ
 `<channel source="muster">` events. No keystroke injection, no pane targeting — the agent
 delivers its own inbox to itself over a stdio MCP channel, backed by a central HTTP bus.
 
-> **Status: v1 — inbound delivery + `roster` / `search` / `chat` / `fetch` / `announce`.**
+> **Status: v1 — inbound delivery + `roster` / `chat` / `fetch` / `announce`.**
 > `ack` and `task_add` are out of scope for now.
 
 ## How it works
@@ -22,11 +22,12 @@ delivers its own inbox to itself over a stdio MCP channel, backed by a central H
   the channel stays idle (never crashes); the stream reconnects with capped backoff.
 - The read cursor lives entirely server-side — the shim never persists one locally. Only the
   `fetch` op advances it, and each message surfaces exactly once.
-- Five tools:
+- Four tools:
   - `roster` — list the agents visible to you (your own agents on every host, plus any
-    group-shared ones), by full address and online/offline status.
-  - `search` — filter the roster by `user`, `project`, `runtime`, `group`, or `live`
-    (online-only).
+    group-shared ones), grouped by project, each row a full address. Filters: `user`,
+    `project`, `runtime`, `group`, `status`. Lists the **online** agents by default and
+    reports the offline ones as per-project counts — they are still mailable (`chat`
+    queues to their inbox), so pass `status: "offline"` or `"all"` for their addresses.
   - `chat {to, body, subject?, important?}` — **real-time** message to a peer. `to` is any
     contiguous, unique slice of an address (a project name, `host/runtime`, the full
     address…; ambiguous references get back `candidates` to retry with). The recipient sees

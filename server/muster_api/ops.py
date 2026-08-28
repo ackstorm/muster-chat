@@ -74,29 +74,40 @@ async def op_fetch(r, cfg, ident: Identity, sender: Address, args: dict) -> dict
 
 def _public(a: dict) -> dict:
     """Roster row: groups stripped — membership is resolver business, not roster content."""
-    return {k: a[k] for k in ("addr", "user", "host", "runtime", "project", "session", "status", "meta")}
+    return {k: a[k] for k in ("addr", "user", "host", "runtime", "project", "session",
+                              "status", "last_connect", "meta")}
+
+
+STATUSES = ("online", "offline", "all")
 
 
 async def op_roster(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
-    return {"ok": True, "agents": [_public(a) for a in await _visible_agents(r, ident)]}
-
-
-async def op_search(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
+    """The directory op: visible agents, optionally filtered. Defaults to status=online —
+    an all-status roster is mostly dead sessions (identities outlive their pane by
+    agent_retention). The rows the status filter drops come back as per-project counts in
+    `hidden`, never silently: offline agents are still mailable (chat queues to their
+    inbox), so callers must be able to see that they exist and ask for them by name."""
     agents = await _visible_agents(r, ident)
-    if args.get("user"):
-        agents = [a for a in agents if a["user"] == args["user"]]
-    if args.get("project"):
-        agents = [a for a in agents if a["project"] == args["project"]]
-    if args.get("runtime"):
-        agents = [a for a in agents if a["runtime"] == args["runtime"]]
+    for field in ("user", "project", "runtime"):
+        if args.get(field):
+            agents = [a for a in agents if a[field] == args[field]]
     if args.get("group"):
         if args["group"] not in ident.groups:
             raise OpError(403, {"code": "invalid_scope",
                                 "message": "group must be one of your own groups"})
         agents = [a for a in agents if args["group"] in a["groups"]]
-    if args.get("live"):
-        agents = [a for a in agents if a["status"] == "online"]
-    return {"ok": True, "agents": [_public(a) for a in agents]}
+    status = args.get("status") or "online"
+    if status not in STATUSES:
+        raise OpError(400, {"code": "invalid_status",
+                            "message": f"status must be one of {', '.join(STATUSES)}"})
+    hidden: dict[str, int] = {}
+    if status != "all":
+        keep = [a for a in agents if a["status"] == status]
+        for a in agents:
+            if a["status"] != status and a["addr"] != str(sender):
+                hidden[a["project"]] = hidden.get(a["project"], 0) + 1
+        agents = keep
+    return {"ok": True, "agents": [_public(a) for a in agents], "hidden": hidden}
 
 
 async def op_announce(r, cfg, ident: Identity, sender: Address, args: dict) -> dict:
@@ -130,8 +141,7 @@ async def op_announce(r, cfg, ident: Identity, sender: Address, args: dict) -> d
     return {"ok": True, "recipients": len(eligible)}
 
 
-_OPS = {"chat": op_chat, "fetch": op_fetch, "roster": op_roster,
-        "search": op_search, "announce": op_announce}
+_OPS = {"chat": op_chat, "fetch": op_fetch, "roster": op_roster, "announce": op_announce}
 
 
 async def dispatch(r, cfg, ident: Identity, sender: Address, op: str, args: dict) -> dict:

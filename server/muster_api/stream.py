@@ -54,7 +54,7 @@ async def stream_endpoint(request: Request, ident, addr) -> StreamingResponse:
                         return
                     if tuple(ident2.groups) != tuple(ident.groups):
                         # groups changed since connect (or last ping) — refresh the registry
-                        # entry so ACL/roster/search reflect it for the rest of the stream life.
+                        # entry so ACL/roster reflect it for the rest of the stream life.
                         await store.register_agent(r, addr, ident2.groups, meta, cfg.agent_retention)
                         ident = ident2
                     await store.touch_presence(r, a, connection_id, cfg.presence_ttl)

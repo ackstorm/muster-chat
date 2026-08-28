@@ -16,7 +16,7 @@ The target Valkey MUST run `--appendonly yes --appendfsync everysec` (spec §16)
 
 ## API in 30 seconds
 
-    POST /v1/rpc     {"op": "roster"|"search"|"chat"|"fetch"|"announce", "args": {...}}
+    POST /v1/rpc     {"op": "roster"|"chat"|"fetch"|"announce", "args": {...}}
     GET  /v1/stream  SSE: deliver events (chat envelopes, announces, unread nudge) + pings
     Headers on everything: x-muster-api-key, x-muster-agent: host/runtime/project/session
     (x-muster-meta JSON on the stream connect only)

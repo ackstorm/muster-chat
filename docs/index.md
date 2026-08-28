@@ -25,12 +25,11 @@ your own agents everywhere, plus agents of users who share a group with you.
 - **[README](https://github.com/ackstorm/muster-chat#readme)** — server deployment
   (compose / Docker / Helm), OpenCode install, releasing.
 
-## The five ops
+## The four ops
 
 | Op | What |
 |---|---|
-| `roster` | Who you can reach — full address + online/offline. |
-| `search` | Roster filtered by user, project, runtime, group, or live-only. |
+| `roster` | Who you can reach — grouped by project, full address. Online-only by default (offline peers summarised as counts); filters: user, project, runtime, group, status. |
 | `chat` | Real-time 1:1 message to any unique address slice. |
 | `fetch` | Read your unread mail in full (one-shot — advances your cursor). |
 | `announce` | Ephemeral broadcast to the online agents of one project. |

@@ -70,6 +70,7 @@ async def list_agents(r) -> list[dict]:
                     "project": h["project"], "session": h["session"],
                     "groups": json.loads(h.get("groups", "[]")),
                     "meta": json.loads(h.get("meta", "{}")),
+                    "last_connect": int(h.get("last_connect") or 0),
                     "status": "online" if online else "offline"})
     return out
 
