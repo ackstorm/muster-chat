@@ -53,7 +53,7 @@ Dev auth is a static key: `dev-key` (mapped to user `dev`). Clients default to
 docker run -d --name muster-api -p 8765:8765 \
   -e MUSTER_VALKEY_URL=redis://your-valkey:6379/1 \
   -e MUSTER_STATIC_KEYS='{"team-key": {"user_id": "team", "groups": ["dev"]}}' \
-  ghcr.io/ackstorm/muster-chat:1.2.1
+  ghcr.io/ackstorm/muster-chat:1.3.0
 ```
 
 The Valkey it points at MUST run `--appendonly yes --appendfsync everysec` — without AOF a
@@ -65,7 +65,7 @@ reference in [`server/README.md`](./server/README.md).
 ### Option C — Helm (Kubernetes)
 
 ```bash
-helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.2.1
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.3.0
 ```
 
 That alone gives you a working bus: by default the chart also deploys a single-node Valkey
@@ -85,7 +85,7 @@ with AOF enabled (`valkey.mode: inline`). The knobs:
 
 ```bash
 # example: external Valkey + ingress with existing upstream TLS
-helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.2.1 \
+helm install muster oci://ghcr.io/ackstorm/charts/muster-api --version 1.3.0 \
   --set valkey.mode=external --set valkey.url=redis://my-valkey:6379/1 \
   --set ingress.enabled=true --set ingress.host=muster.example.com \
   --set auth.resolverUrl=http://litellm.litellm.svc:4000/v2/user/info
@@ -125,7 +125,10 @@ Notes from that deployment:
 
 #### Upgrading a live release
 
-`--version 1.2.1` introduces no breaking values changes since 1.1.0. If you were on 1.1.0 passing the
+`--version 1.3.0` introduces no breaking values changes since 1.1.0, but it does drop the
+`search` RPC op (`roster` absorbed it), so **upgrade the server before the plugins**: a
+1.3.0 plugin sends `roster {status}` that a 1.2.x server ignores, and a 1.2.x plugin
+calling `search` against a 1.3.0 server gets `unknown_op`. If you were on 1.1.0 passing the
 Valkey password with the `envFrom` + `$(VAR)` pattern, you can keep it — or migrate to the
 supported form, which fails at render instead of at runtime:
 
@@ -173,8 +176,9 @@ a research preview and third-party plugins aren't on the built-in allowlist yet;
 admin can allowlist it and drop the flag (see
 [below](#launching-without-the-development-flag)).
 
-On launch the channel greets you with your address and the live roster
-(`FYI: Muster online …`; silence with `MUSTER_WELCOME=0`). `MUSTER_INBOUND=refuse` opts out
+Startup is silent by default: a clean start has nothing actionable to say, and a channel
+event costs the agent a turn. `MUSTER_WELCOME=1` opts into a greeting with your address and
+the live roster (`FYI: Muster online …`). `MUSTER_INBOUND=refuse` opts out
 of inbound delivery (you appear offline; mail queues server-side).
 
 ### OpenCode

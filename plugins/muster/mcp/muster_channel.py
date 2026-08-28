@@ -50,7 +50,7 @@ INSTRUCTIONS = (
 
 URL = os.environ.get("MUSTER_URL", "http://localhost:8765")
 API_KEY = os.environ.get("MUSTER_API_KEY", "dev-key")
-WELCOME = os.environ.get("MUSTER_WELCOME", "1") not in ("0", "false", "")
+WELCOME = os.environ.get("MUSTER_WELCOME", "0") not in ("0", "false", "")
 INBOUND = os.environ.get("MUSTER_INBOUND", "accept") != "refuse"
 
 
@@ -289,8 +289,12 @@ async def relay(session):
 
 
 async def welcome(session):
-    """Visible startup orientation: identity + peer count + tool nudge. MUSTER_WELCOME=0
-    disables. Front-load the actionable bits — the terminal shows a one-line preview."""
+    """Opt-in startup orientation: identity + peer count + tool nudge (MUSTER_WELCOME=1).
+
+    Off by default: a clean start has nothing actionable to say, and a channel event costs
+    the agent a turn before the user has asked for anything. The doctrine, the tool list and
+    the skill nudge already live in the always-on `instructions` string; the address is the
+    first line of `roster`, and the counts are stale the moment they are printed."""
     if not WELCOME:
         return
     await anyio.sleep(2)                     # let the session finish initializing

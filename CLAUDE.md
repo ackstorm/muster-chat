@@ -56,8 +56,7 @@ claude plugin validate ./plugins/muster
 
 # Run the server standalone for debugging (no Claude needed — falls back to env identity).
 # Pin mcp to match .mcp.json (the server uses the private srv._handle_message — see invariants).
-MUSTER_WELCOME=0 \
-  uv run --with 'mcp>=1.28,<1.29' --with httpx --no-project python plugins/muster/mcp/muster_channel.py
+uv run --with 'mcp>=1.28,<1.29' --with httpx --no-project python plugins/muster/mcp/muster_channel.py
 ```
 
 **Verifying server behaviour without a live Claude:** drive the stdio server with a raw MCP client (initialize → tools/call → capture `notifications/claude/channel`). `docs/PROBE-tools-and-channel.md` records the working two-instance end-to-end pattern; reuse it rather than launching real Claude sessions.
@@ -74,7 +73,9 @@ MUSTER_WELCOME=0 \
 `MUSTER_URL` (default `http://localhost:8765`) — muster-api base URL. `MUSTER_API_KEY`
 (default `dev-key`) — sent as `x-muster-api-key`; `user` is stamped server-side from it.
 `MUSTER_HOST` — override for the `host` address segment (else the machine hostname).
-`MUSTER_WELCOME=0` — silence the startup welcome push. `MUSTER_INBOUND=refuse` — never
+`MUSTER_WELCOME=1` — opt into the startup welcome push (off by default: a clean start has
+nothing actionable to say, and the doctrine/tools/skill nudge already ship in the always-on
+`instructions` string). `MUSTER_INBOUND=refuse` — never
 open the SSE stream (you appear offline; outbound tools still work; mail queues server-side).
 
 ## Scope

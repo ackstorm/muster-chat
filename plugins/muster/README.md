@@ -38,9 +38,11 @@ delivers its own inbox to itself over a stdio MCP channel, backed by a central H
     read (one-shot; limit is clamped to 1–100).
   - `announce {scope, project, body, subject?}` — ephemeral broadcast to the ONLINE agents of
     one project; never stored, so an offline agent simply misses it.
-- On startup it pushes one **welcome** event: your address, the live roster count, and a
-  nudge to load the `muster-chat` skill (skills aren't auto-read — the core rules also ship
-  in the always-on `instructions` string). Disable with `MUSTER_WELCOME=0`.
+- Startup is **silent by default** — a clean start has nothing actionable to say, and a
+  channel event costs the agent a turn before the user has asked for anything.
+  `MUSTER_WELCOME=1` opts into one **welcome** event: your address, the live roster count,
+  and a nudge to load the `muster-chat` skill (skills aren't auto-read — the core rules
+  ship in the always-on `instructions` string either way).
 - On **`/clear` or compaction** a **bundled `SessionStart` hook** (`hooks/hooks.json`,
   matcher `clear|compact`) re-injects a short static nudge — "Muster is still active, check
   `roster`/`fetch`, load the skill" — into the fresh context. The MCP server keeps running

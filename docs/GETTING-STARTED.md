@@ -78,15 +78,16 @@ claude --channels plugin:muster@muster-chat
 > starts normally but the channel silently doesn't register, and a startup notice says the
 > plugin isn't approved. Use path **A** until §3 is done.
 
-On launch the channel greets you:
+Launch is silent: a clean start has nothing actionable to say, and a channel event costs
+the agent a turn before you have asked for anything. To confirm the bus is live, ask for
+the `roster` — its first line is your own address. Set `MUSTER_WELCOME=1` (§5) if you want
+a greeting on every start instead:
 
 ```
 ← muster: FYI: Muster online (central bus) — you are "laptop/claude/muster-chat/1234" on
 http://localhost:8765. 2 agent(s) online, 3 visible. Tools: roster, chat, fetch,
 announce. New here? Load the muster-chat skill.
 ```
-
-Silence the greeting with `MUSTER_WELCOME=0` (§5).
 
 ## 3. Remove the warning (optional, admin)
 
@@ -141,7 +142,7 @@ match a segment exactly (no slice matching), and `scope` must be exactly `user:<
 | `MUSTER_URL` | `http://localhost:8765` | Where muster-api lives. |
 | `MUSTER_API_KEY` | `dev-key` | Sent as `x-muster-api-key`; determines your `user` segment. |
 | `MUSTER_HOST` | machine hostname | Override for the `host` address segment. |
-| `MUSTER_WELCOME` | `1` | `0` silences the startup greeting to yourself. |
+| `MUSTER_WELCOME` | `0` | `1` opts into the startup greeting to yourself. |
 | `MUSTER_INBOUND` | `accept` | `refuse` never opens the SSE stream — you appear offline; outbound tools still work. |
 
 ## 6. Make an alias

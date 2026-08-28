@@ -26,6 +26,7 @@ release-bump:
 	sed -i 's/^version = ".*"/version = "$(VERSION)"/' server/pyproject.toml
 	sed -i 's/^version: .*/version: $(VERSION)/; s/^appVersion: .*/appVersion: "$(VERSION)"/' helm/muster-api/Chart.yaml
 	sed -i 's/"version": ".*"/"version": "$(VERSION)"/' plugins/muster/.claude-plugin/plugin.json
+	sed -i 's|ghcr.io/ackstorm/muster-chat:[0-9]\+\.[0-9]\+\.[0-9]\+|ghcr.io/ackstorm/muster-chat:$(VERSION)|g; s|--version [0-9]\+\.[0-9]\+\.[0-9]\+|--version $(VERSION)|g' README.md
 	cd server && uv lock
 	@grep -q 'version = "$(VERSION)"' server/pyproject.toml || { echo "pyproject bump failed"; exit 1; }
 	@grep -q '^version: $(VERSION)' helm/muster-api/Chart.yaml || { echo "Chart version bump failed"; exit 1; }
